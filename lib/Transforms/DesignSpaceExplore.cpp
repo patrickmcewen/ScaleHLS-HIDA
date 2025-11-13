@@ -15,6 +15,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include <numeric>
 #include <vector>
+#include <chrono>
 // #include <pthread.h>
 
 #define DEBUG_TYPE "scalehls"
@@ -416,8 +417,14 @@ void LoopDesignSpace::initializeLoopDesignSpace(unsigned maxInitParallel) {
     auto parallel = std::accumulate(tileList.begin(), tileList.end(),
                                     (unsigned)1, std::multiplies<unsigned>());
     //LLVM_DEBUG(llvm::dbgs() << "The parallel of the tile list " << config << " is " << parallel << "\n";);
-    if (parallel <= maxInitParallel) // || config == parallelConfig)
+    if (parallel <= maxInitParallel) {// || config == parallelConfig)
+      // Time the evaluateTileConfig function
+      auto startTime = std::chrono::high_resolution_clock::now();
       evaluateTileConfig(config);
+      auto endTime = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+      LLVM_DEBUG(llvm::dbgs() << "evaluateTileConfig() took " << duration.count() << " ms, evaluated from initializeLoopDesignSpace()\n";);
+    }
   }
 
   //LLVM_DEBUG(llvm::dbgs() << "\n\n");
@@ -521,7 +528,12 @@ void LoopDesignSpace::exploreLoopDesignSpace(unsigned maxIterNum,
       auto config = closestNeighbor.value();
       auto tileList = getTileList(config);
 
+      // Time the evaluateTileConfig function
+      auto startTime = std::chrono::high_resolution_clock::now();
       evaluateTileConfig(config);
+      auto endTime = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+      LLVM_DEBUG(llvm::dbgs() << "evaluateTileConfig() took " << duration.count() << " ms, evaluated from exploreLoopDesignSpace()\n";);
       break;
     }
 
@@ -584,7 +596,12 @@ void FuncDesignSpace::combLoopDesignSpaces() {
   if (loopDesignSpaces.empty()) {
     //LLVM_DEBUG(llvm::dbgs() << "[DSE] WARNING: No loop bands found in function '" 
     //                 << func.getName() << "'. Will create a default function design point.\n";);
+    // Time the estimateFunc function
+    auto startTime = std::chrono::high_resolution_clock::now();
     estimator.estimateFunc(func);
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    LLVM_DEBUG(llvm::dbgs() << "estimateFunc() took " << duration.count() << " ms, evaluated from combLoopDesignSpaces()\n";);
     auto latency = getTiming(func).getLatency();
     auto dspNum = getResource(func).getDsp();
     //dumpFuncMLIR(func, "default_func_design_point", false);
@@ -848,45 +865,40 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
 
   // Initialize the hierarchical function design space with the first hierarchical function design space.
   LLVM_DEBUG(llvm::dbgs() << "Traversing all design points of the first sub function " << subHierFuncDesignSpaces[0].func.getName() << ". There are " << subHierFuncDesignSpaces[0].paretoPoints.size() << " design points.\n";);
+  unsigned iter = 0;
   for (auto &subHierFuncPoint : subHierFuncDesignSpaces[0].paretoPoints) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     auto subFunc = getSubFunc(func, subHierFuncDesignSpaces[0].func.getName());
     setTimingAndResourceSubFunc(func, subFunc, subHierFuncPoint.latency, subHierFuncPoint.dspNum);
-
-
+    
+    std::vector<HierFuncDesignPoint> subHierFuncPoints;
+    // form the sub hierarchical function design points. It includes the given point of the first function and the minimum resource point of the other functions.
+    subHierFuncPoints.push_back(subHierFuncPoint);
     for (unsigned ii = 1; ii < subHierFuncDesignSpaces.size(); ++ii) {
       auto &otherSubHierFuncSpace = subHierFuncDesignSpaces[ii];
-      auto otherSubFunc = otherSubHierFuncSpace.func;
       auto otherSubFuncPoint = otherSubHierFuncSpace.paretoPoints[otherSubHierFuncSpace.paretoPoints.size() - 1];
-      setTimingAndResourceSubFunc(func, otherSubFunc, otherSubFuncPoint.latency, otherSubFuncPoint.dspNum);
+      subHierFuncPoints.push_back(otherSubFuncPoint);
     }
-    
-    // Traverse all design points of the first hierarchical function design space.
-    for (auto &subHierFuncPoint : subHierFuncDesignSpaces[0].paretoPoints) {
-      auto subFunc = getSubFunc(func, subHierFuncDesignSpaces[0].func.getName());
-      setTimingAndResourceSubFunc(func, subFunc, subHierFuncPoint.latency, subHierFuncPoint.dspNum);
-      
-      std::vector<HierFuncDesignPoint> subHierFuncPoints;
-      // form the sub hierarchical function design points. It includes the given point of the first function and the minimum resource point of the other functions.
-      subHierFuncPoints.push_back(subHierFuncPoint);
-      for (unsigned ii = 1; ii < subHierFuncDesignSpaces.size(); ++ii) {
-        auto &otherSubHierFuncSpace = subHierFuncDesignSpaces[ii];
-        auto otherSubFuncPoint = otherSubHierFuncSpace.paretoPoints[otherSubHierFuncSpace.paretoPoints.size() - 1];
-        subHierFuncPoints.push_back(otherSubFuncPoint);
-      }
 
-      // Explore the loop design space of the current function for the given configurations of sub functions
-      auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath);
-      setFuncDesignSpace(newFuncDesignSpace);
-      for (auto &funcPoint : newFuncDesignSpace.paretoPoints) {
-        auto newHierFuncPoint = createHierFuncDesignPoint(funcPoint, subHierFuncPoints);
-        paretoPoints.push_back(newHierFuncPoint);
-      }
-      //dumpHierFuncDesignPoints(func.getName(), paretoPoints, *this);
+    // Explore the loop design space of the current function for the given configurations of sub functions
+    auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath);
+    setFuncDesignSpace(newFuncDesignSpace);
+    for (auto &funcPoint : newFuncDesignSpace.paretoPoints) {
+      auto newHierFuncPoint = createHierFuncDesignPoint(funcPoint, subHierFuncPoints);
+      paretoPoints.push_back(newHierFuncPoint);
     }
+    //dumpHierFuncDesignPoints(func.getName(), paretoPoints, *this);
+    iter++;
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the first sub function " << subHierFuncDesignSpaces[0].func.getName() << "\n";);
   }
+  LLVM_DEBUG(llvm::dbgs() << "Done traversing all design points of the first sub function " << subHierFuncDesignSpaces[0].func.getName() << ". There are now " << paretoPoints.size() << " pareto points in the current function design space.\n";);
 
   // Loop over the rest of the sub function design spaces.
-  for (unsigned i = 0, e = subHierFuncDesignSpaces.size(); i < e; ++i) {
+  for (unsigned i = 1, e = subHierFuncDesignSpaces.size(); i < e; ++i) {
+    unsigned iter = 0;
     std::vector<HierFuncDesignPoint> newParetoPoints;
     auto &subHierFuncSpace = subHierFuncDesignSpaces[i];
 
@@ -906,6 +918,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
       // Traverse all design points of the next hierarchical function.
       //LLVM_DEBUG(llvm::dbgs() << "Traversing all design points of the next sub function " << subHierFuncSpace.func.getName() << ". There are " << subHierFuncSpace.paretoPoints.size() << " design points.\n";);
       for (auto &subHierFuncPoint : subHierFuncSpace.paretoPoints) {
+        auto startTime = std::chrono::high_resolution_clock::now();
         // Annotate the next hierarchical function.
         auto subFunc = getSubFunc(func, subHierFuncSpace.func.getName());
         setTimingAndResourceSubFunc(func, subFunc, subHierFuncPoint.latency, subHierFuncPoint.dspNum);
@@ -920,6 +933,10 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
           newParetoPoints.push_back(newHierFuncPoint);
         }
         //dumpHierFuncDesignPoints(func.getName(), newParetoPoints, *this);
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the sub function " << subHierFuncSpace.func.getName() << "\n";);
+        iter++;
       }
     }
 
@@ -1017,7 +1034,7 @@ bool HierFuncDesignSpace::applyOptStrategyRecursive(func::FuncOp currentFunc, Hi
   estimator.estimateFunc(currentFunc);
   auto optimizedLatency = getTiming(currentFunc).getLatency();
   auto optimizedDspNum = getResource(currentFunc).getDsp();
-  LLVM_DEBUG(llvm::dbgs() << "The optimized latency of the current function is " << optimizedLatency << " and the optimized dsp num is " << optimizedDspNum << "\n";);
+  //LLVM_DEBUG(llvm::dbgs() << "The optimized latency of the current function is " << optimizedLatency << " and the optimized dsp num is " << optimizedDspNum << "\n";);
   //dumpFuncMLIR(currentFunc, "optimized_func", false);
   // STEP 2: Apply optimization strategies to the sub functions
   //LLVM_DEBUG(llvm::dbgs() << hierFuncPoint.subHierFuncDesignPoints.size() << " sub function design points to apply optimization strategies to\n";);
@@ -1376,7 +1393,7 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
   //funcSpace.exportParetoDesigns(outputNum, outputRootPath);
 
   // Apply the best function design point under the constraints.
-  for (auto &funcPoint : funcSpace.paretoPoints) {
+  /*for (auto &funcPoint : funcSpace.paretoPoints) {
     if (funcPoint.dspNum <= maxDspNum) {
       std::vector<FactorList> tileLists;
       std::vector<unsigned> targetIIs;
@@ -1400,7 +1417,7 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
         assert(false && "Failed to apply optimization strategies to the current function");
       break;
     }
-  }
+  }*/
 
   return funcSpace;
 }
@@ -1521,9 +1538,14 @@ struct DesignSpaceExplore : public DesignSpaceExploreBase<DesignSpaceExplore> {
     // Optimize the top function.
     // TODO: Support to contain sub-functions.
     for (auto func : module.getOps<func::FuncOp>()) {
-      if (hasTopFuncAttr(func))
+      if (hasTopFuncAttr(func)) {
+        auto startTime = std::chrono::high_resolution_clock::now();
         explorer.applyDesignSpaceExplore(func, directiveOnly, outputPath,
                                          csvPath);
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        LLVM_DEBUG(llvm::dbgs() << "Design Space Exploration for function " << func.getName() << " took " << duration.count() << " ms\n";);
+      }
     }
   }
 };

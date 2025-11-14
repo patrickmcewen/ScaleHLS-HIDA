@@ -17,6 +17,7 @@ namespace mlir {
 namespace scalehls {
 
 using namespace hls;
+using namespace affine;
 
 using AffineLoopBand = SmallVector<AffineForOp, 6>;
 using AffineLoopBands = std::vector<AffineLoopBand>;
@@ -112,20 +113,20 @@ bool hasEffectOnExternalBuffer(Operation *op);
 /// so that we can apply vectorize, unroll and jam, etc.
 FactorList
 getDistributedFactors(unsigned factor,
-                      const SmallVectorImpl<mlir::AffineForOp> &band);
+                      const SmallVectorImpl<AffineForOp> &band);
 
 /// Distribute the given factor evenly on all loop levels. The generated factors
 /// are garanteed to be divisors of the factors in given "costrFactorsList".
 /// This method can fail due to non-constant loop bounds.
 LogicalResult
 getEvenlyDistributedFactors(unsigned maxFactor, FactorList &factors,
-                            const SmallVectorImpl<mlir::AffineForOp> &band,
+                            const SmallVectorImpl<AffineForOp> &band,
                             const SmallVectorImpl<FactorList> &constrFactors,
                             bool powerOf2Constr = false);
 
 /// Return a pair which indicates whether the if statement is always true or
 /// false, respectively. The returned result is one-hot.
-std::pair<bool, bool> ifAlwaysTrueOrFalse(mlir::AffineIfOp ifOp);
+std::pair<bool, bool> ifAlwaysTrueOrFalse(AffineIfOp ifOp);
 
 /// Check whether the two given if statements have the same condition.
 bool checkSameIfStatement(AffineIfOp lhsOp, AffineIfOp rhsOp);
@@ -146,14 +147,14 @@ bool crossRegionDominates(Operation *a, Operation *b);
 /// Check if the lhsOp and rhsOp are in the same block. If so, return their
 /// ancestors that are located at the same block. Note that in this check,
 /// AffineIfOp is transparent.
-Optional<std::pair<Operation *, Operation *>> checkSameLevel(Operation *lhsOp,
+std::optional<std::pair<Operation *, Operation *>> checkSameLevel(Operation *lhsOp,
                                                              Operation *rhsOp);
 
 unsigned getCommonSurroundingLoops(Operation *A, Operation *B,
                                    AffineLoopBand *band);
 
 /// Calculate the upper and lower bound of the affine map if possible.
-Optional<std::pair<int64_t, int64_t>> getBoundOfAffineMap(AffineMap map,
+std::optional<std::pair<int64_t, int64_t>> getBoundOfAffineMap(AffineMap map,
                                                           ValueRange operands);
 
 /// Calculate partition factors through analyzing the "memrefType" and return
@@ -194,7 +195,7 @@ void getLoopBands(Block &block, AffineLoopBands &bands,
 void getArrays(Block &block, SmallVectorImpl<Value> &arrays,
                bool allowArguments = true);
 
-Optional<unsigned> getAverageTripCount(AffineForOp forOp);
+std::optional<unsigned> getAverageTripCount(AffineForOp forOp);
 
 bool checkDependence(Operation *A, Operation *B);
 

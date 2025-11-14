@@ -56,7 +56,7 @@ def AnyAxi : AxiOf<[AnyType]>;
 
 def DispatchOp : HLSOp<"dataflow.dispatch", [RecursiveMemoryEffects,
       SingleBlockImplicitTerminator<"YieldOp">,
-      ParentOneOf<["func::FuncOp", "AffineForOp"]>]> {
+      ParentOneOf<["func::FuncOp", "affine::AffineForOp"]>]> {
   let summary = "Represent a dataflow dispatch";
   let description = [{
     Dispatch op has a transparent region that contains a list of task ops to be
@@ -114,7 +114,7 @@ def YieldOp : HLSOp<"dataflow.yield", [NoMemoryEffect, ReturnLike, Terminator,
   let arguments = (ins Variadic<AnyType>:$results);
   let assemblyFormat = "$results attr-dict `:` type($results)";
 
-  let builders = [OpBuilder<(ins), "build($_builder, $_state, llvm::None);">];
+  let builders = [OpBuilder<(ins), "build($_builder, $_state, std::nullopt);">];
 }
 
 def ToStreamOp : HLSOp<"dataflow.to_stream", [NoMemoryEffect]> {
@@ -146,7 +146,7 @@ def ToValueOp : HLSOp<"dataflow.to_value", [NoMemoryEffect]> {
 def ScheduleOp : HLSOp<"dataflow.schedule", [
       DeclareOpInterfaceMethods<MemoryEffectsOpInterface>, IsolatedFromAbove,
       AffineScope, SingleBlock, NoTerminator,
-      ParentOneOf<["func::FuncOp", "AffineForOp"]>]> {
+      ParentOneOf<["func::FuncOp", "affine::AffineForOp"]>]> {
   let summary = "Represent a dataflow schedule";
   let description = [{
     Schedule op has an isolated region to contain a list of dataflow node ops to

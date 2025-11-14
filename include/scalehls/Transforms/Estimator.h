@@ -37,7 +37,7 @@ public:
 
   // Entry for estimating function and loop.
   void estimateFunc(func::FuncOp func);
-  void estimateLoop(AffineForOp loop, func::FuncOp func);
+  void estimateLoop(affine::AffineForOp loop, func::FuncOp func);
 
   using HLSVisitorBase::visitOp;
   bool visitUnhandledOp(Operation *op, int64_t begin) {
@@ -45,14 +45,14 @@ public:
     return setTiming(op, begin, begin, 0, 0), true;
   }
 
-  bool visitOp(AffineForOp op, int64_t begin);
-  bool visitOp(AffineIfOp op, int64_t begin);
+  bool visitOp(affine::AffineForOp op, int64_t begin);
+  bool visitOp(affine::AffineIfOp op, int64_t begin);
   bool visitOp(scf::IfOp op, int64_t begin);
   bool visitOp(func::CallOp op, int64_t begin);
-  bool visitOp(AffineLoadOp op, int64_t begin) {
+  bool visitOp(affine::AffineLoadOp op, int64_t begin) {
     return estimateLoadStoreTiming(op, begin), true;
   }
-  bool visitOp(AffineStoreOp op, int64_t begin) {
+  bool visitOp(affine::AffineStoreOp op, int64_t begin) {
     return estimateLoadStoreTiming(op, begin), true;
   }
   bool visitOp(memref::LoadOp op, int64_t begin) {

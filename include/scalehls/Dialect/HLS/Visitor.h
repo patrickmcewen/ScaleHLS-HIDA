@@ -14,6 +14,7 @@ namespace mlir {
 namespace scalehls {
 
 using namespace hls;
+using namespace affine;
 
 /// This class is a visitor for SSACFG operation nodes.
 template <typename ConcreteType, typename ResultType, typename... ExtraArgs>
@@ -57,7 +58,7 @@ public:
 
             // Float binary expressions.
             arith::CmpFOp, arith::AddFOp, arith::SubFOp, arith::MulFOp,
-            arith::DivFOp, arith::RemFOp, arith::MaxFOp, arith::MinFOp,
+            arith::DivFOp, arith::RemFOp,
             math::PowFOp,
 
             // Integer binary expressions.
@@ -174,8 +175,6 @@ public:
   HANDLE(arith::MulFOp);
   HANDLE(arith::DivFOp);
   HANDLE(arith::RemFOp);
-  HANDLE(arith::MaxFOp);
-  HANDLE(arith::MinFOp);
   HANDLE(math::PowFOp);
 
   // Integer binary expressions.

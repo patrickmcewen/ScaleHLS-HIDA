@@ -92,7 +92,7 @@ struct LinalgFakeQuantize : public LinalgFakeQuantizeBase<LinalgFakeQuantize> {
     SmallVector<ValueType, 64> values;
     for (unsigned i = 0; i < size; ++i)
       values.push_back(std::rand() % maxValue);
-    return DenseIntElementsAttr::get(quanType, values);
+    return DenseIntElementsAttr::get(quanType.cast<ShapedType>(), ArrayRef<ValueType>(values));
   }
 
   void runOnOperation() override {
@@ -180,8 +180,6 @@ struct LinalgFakeQuantize : public LinalgFakeQuantizeBase<LinalgFakeQuantize> {
     patterns.add<ArithFloatToInt<arith::AddFOp, arith::AddIOp>>(context);
     patterns.add<ArithFloatToInt<arith::DivFOp, arith::DivUIOp>>(context);
     patterns.add<ArithFloatToInt<arith::ExtFOp, arith::ExtUIOp>>(context);
-    patterns.add<ArithFloatToInt<arith::MaxFOp, arith::MaxUIOp>>(context);
-    patterns.add<ArithFloatToInt<arith::MinFOp, arith::MinUIOp>>(context);
     patterns.add<ArithFloatToInt<arith::MulFOp, arith::MulIOp>>(context);
     patterns.add<ArithFloatToInt<arith::RemFOp, arith::RemUIOp>>(context);
     patterns.add<ArithFloatToInt<arith::SubFOp, arith::SubIOp>>(context);

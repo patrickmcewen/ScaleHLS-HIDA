@@ -51,7 +51,10 @@ struct TosaFakeQuantize : public TosaFakeQuantizeBase<TosaFakeQuantize> {
             // for (auto value : constant.valueAttr().getValues<float>())
             //   list.push_back(value);
 
-            auto quantValue = DenseIntElementsAttr::get(quantType, list);
+            auto shapedType = quantType.dyn_cast<ShapedType>();
+            if (!shapedType)
+              continue;
+            auto quantValue = DenseIntElementsAttr::get(shapedType, ArrayRef<int8_t>(list));
             constant->setAttr(constant.getValueAttrName(), quantValue);
           }
 

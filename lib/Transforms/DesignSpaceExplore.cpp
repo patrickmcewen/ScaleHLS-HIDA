@@ -317,7 +317,7 @@ void LoopDesignSpace::dumpLoopDesignSpace(StringRef csvFilePath) {
 }
 
 /// Get a random tile config which is one of the closest neighbors of "point".
-Optional<TileConfig>
+std::optional<TileConfig>
 LoopDesignSpace::getRandomClosestNeighbor(LoopDesignPoint point,
                                           float maxDistance) {
   // Traverse all unestimated tile configs and collect all neighbors.
@@ -330,7 +330,7 @@ LoopDesignSpace::getRandomClosestNeighbor(LoopDesignPoint point,
   }
 
   if (candidateConfigs.empty())
-    return Optional<TileConfig>();
+    return std::nullopt;
 
   // Sort candidate configs and collect the closest points.
   llvm::sort(candidateConfigs);
@@ -571,8 +571,8 @@ bool ScaleHLSExplorer::emitQoRDebugInfo(func::FuncOp func,
 
 static int64_t getInnerParallelism(Block &block) {
   int64_t count = 0;
-  for (auto loop : block.getOps<AffineForOp>()) {
-    auto innerCount = getInnerParallelism(loop.getLoopBody().front());
+  for (auto loop : block.getOps<affine::AffineForOp>()) {
+    auto innerCount = getInnerParallelism(*loop.getBody());
     if (auto trip = getAverageTripCount(loop))
       count += trip.value() * innerCount;
     else
@@ -637,7 +637,7 @@ bool ScaleHLSExplorer::simplifyLoopNests(func::FuncOp func) {
       // Calculate the overall introduced parallelism if the innermost loop of
       // the current loop band is fully unrolled.
       auto parallelism =
-          getInnerParallelism(innermostLoop.getLoopBody().front());
+          getInnerParallelism(*innermostLoop.getBody());
 
       // Collect all candidate loops into an vector, we'll ignore too large
       // parallelism as unrolling them typically introduce very high cost.

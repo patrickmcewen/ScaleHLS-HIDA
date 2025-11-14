@@ -28,7 +28,7 @@ public:
     Value upperBound = lowerAffineUpperBound(op, rewriter);
     Value step = rewriter.create<arith::ConstantIndexOp>(loc, op.getStep());
     auto scfForOp = rewriter.create<scf::ForOp>(loc, lowerBound, upperBound,
-                                                step, op.getIterOperands());
+                                                step, op.getInits());
 
     // Pass loop directive and info to the generated SCF loop.
     if (auto attr = getLoopDirective(op))
@@ -98,7 +98,7 @@ struct LowerAffine : public LowerAffineBase<LowerAffine> {
     patterns.add<LowerAffineFor>(context, /*benefit=*/1);
 
     ConversionTarget target(*context);
-    target.addIllegalDialect<mlir::AffineDialect>();
+    target.addIllegalDialect<affine::AffineDialect>();
     target.addLegalDialect<arith::ArithDialect, memref::MemRefDialect,
                            scf::SCFDialect, vector::VectorDialect>();
     if (failed(applyPartialConversion(func, target, std::move(patterns))))

@@ -38,7 +38,7 @@ struct ConvertTensorToLinalg
                       linalg::FillOp, arith::ConstantOp>();
 
     mlir::RewritePatternSet patterns(context);
-    patterns.add<linalg::PadOpTransformationPattern>(context);
+    // PadOpTransformationPattern removed in newer MLIR
     patterns.add<RemoveRescaleOp>(context);
     // tosa::populateTosaRescaleToArithConversionPatterns(&patterns, true);
 

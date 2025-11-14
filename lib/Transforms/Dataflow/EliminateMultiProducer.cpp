@@ -81,13 +81,18 @@ struct BufferMultiProducer : public OpRewritePattern<ScheduleOp> {
         auto readUses = llvm::make_filter_range(
             newBufferArg.getUses(), [](OpOperand &use) { return isRead(use); });
         if (llvm::hasSingleElement(readUses))
-          if (auto read = dyn_cast<mlir::AffineReadOpInterface>(
+          if (auto read = dyn_cast<affine::AffineReadOpInterface>(
                   readUses.begin()->getOwner())) {
             // We need to make sure all the indices of the affine load are known
             // loop induction variables and meanwhile the load has identity
             // memory access map.
             AffineLoopBand band;
-            getLoopIVs(*read, &band);
+            SmallVector<Operation *> ops;
+            affine::getEnclosingAffineOps(*read, &ops);
+            for (Operation *op : ops) {
+              if (auto forOp = dyn_cast<affine::AffineForOp>(op))
+                band.push_back(forOp);
+            }
 
             llvm::SmallDenseSet<Value> depInductionVars;
             for (auto loop : band)
@@ -130,7 +135,7 @@ struct BufferMultiProducer : public OpRewritePattern<ScheduleOp> {
               }
 
               rewriter.setInsertionPoint(read);
-              auto value = rewriter.create<mlir::AffineLoadOp>(
+              auto value = rewriter.create<affine::AffineLoadOp>(
                   read.getLoc(), bufferArg, read.getMapOperands());
 
               if (!ifExprs.empty()) {
@@ -140,7 +145,7 @@ struct BufferMultiProducer : public OpRewritePattern<ScheduleOp> {
                 rewriter.setInsertionPointToStart(ifOp.getThenBlock());
               }
 
-              rewriter.create<mlir::AffineStoreOp>(
+              rewriter.create<affine::AffineStoreOp>(
                   read.getLoc(), value, newBufferArg, read.getMapOperands());
               continue;
             }

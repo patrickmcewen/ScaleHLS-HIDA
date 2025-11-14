@@ -53,10 +53,10 @@ struct MemrefStoreRaisePattern : public OpRewritePattern<memref::StoreOp> {
 
 namespace {
 struct AffineStoreUndefFoldPattern
-    : public OpRewritePattern<mlir::AffineStoreOp> {
-  using OpRewritePattern<mlir::AffineStoreOp>::OpRewritePattern;
+    : public OpRewritePattern<affine::AffineStoreOp> {
+  using OpRewritePattern<affine::AffineStoreOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(mlir::AffineStoreOp store,
+  LogicalResult matchAndRewrite(affine::AffineStoreOp store,
                                 PatternRewriter &rewriter) const override {
     if (store.getValueToStore().getDefiningOp<LLVM::UndefOp>()) {
       store.emitWarning("undef memory store is folded");
@@ -92,7 +92,7 @@ struct AddIRaisePattern : public OpRewritePattern<arith::AddIOp> {
     r.setInsertionPoint(add);
 
     if (isValidDim(add.getLhs()) && isValidDim(add.getRhs())) {
-      r.replaceOpWithNewOp<mlir::AffineApplyOp>(
+      r.replaceOpWithNewOp<affine::AffineApplyOp>(
           add, r.getAffineDimExpr(0) + r.getAffineDimExpr(1),
           ValueRange({add.getLhs(), add.getRhs()}));
       return success();
@@ -100,14 +100,14 @@ struct AddIRaisePattern : public OpRewritePattern<arith::AddIOp> {
 
     if (auto rhs = add.getRhs().getDefiningOp<arith::ConstantIndexOp>();
         isValidDim(add.getLhs())) {
-      r.replaceOpWithNewOp<mlir::AffineApplyOp>(
+      r.replaceOpWithNewOp<affine::AffineApplyOp>(
           add, r.getAffineDimExpr(0) + rhs.value(), add.getLhs());
       return success();
     }
 
     if (auto lhs = add.getLhs().getDefiningOp<arith::ConstantIndexOp>();
         isValidDim(add.getRhs())) {
-      r.replaceOpWithNewOp<mlir::AffineApplyOp>(
+      r.replaceOpWithNewOp<affine::AffineApplyOp>(
           add, lhs.value() + r.getAffineDimExpr(0), add.getRhs());
       return success();
     }
@@ -127,14 +127,14 @@ struct MulIRaisePattern : public OpRewritePattern<arith::MulIOp> {
 
     if (auto rhs = mul.getRhs().getDefiningOp<arith::ConstantIndexOp>();
         isValidDim(mul.getLhs())) {
-      r.replaceOpWithNewOp<mlir::AffineApplyOp>(
+      r.replaceOpWithNewOp<affine::AffineApplyOp>(
           mul, r.getAffineDimExpr(0) * rhs.value(), mul.getLhs());
       return success();
     }
 
     if (auto lhs = mul.getLhs().getDefiningOp<arith::ConstantIndexOp>();
         isValidDim(mul.getRhs())) {
-      r.replaceOpWithNewOp<mlir::AffineApplyOp>(
+      r.replaceOpWithNewOp<affine::AffineApplyOp>(
           mul, lhs.value() * r.getAffineDimExpr(0), mul.getRhs());
       return success();
     }
@@ -185,7 +185,7 @@ bool scalehls::applyFuncPreprocess(func::FuncOp func, bool isTopFunc) {
   patterns.add<AffineStoreUndefFoldPattern>(context);
   patterns.add<AllocaDemotePattern>(context);
   scalehls::populateBufferConversionPatterns(patterns);
-  vector::populateVectorTransferLoweringPatterns(patterns);
+  // populateVectorTransferLoweringPatterns removed in newer MLIR
   (void)applyPatternsAndFoldGreedily(func, std::move(patterns));
 
   // We don't support any scf or memref operations.

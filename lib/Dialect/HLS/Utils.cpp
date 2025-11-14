@@ -79,7 +79,7 @@ AffineLoopBand scalehls::getNodeLoopBand(NodeOp currentNode) {
 /// Wrap the operations in the block with dispatch op.
 DispatchOp scalehls::dispatchBlock(Block *block) {
   if (!block->getOps<DispatchOp>().empty() ||
-      !isa<func::FuncOp, mlir::AffineForOp>(block->getParentOp()))
+      !isa<func::FuncOp, affine::AffineForOp>(block->getParentOp()))
     return DispatchOp();
 
   OpBuilder builder(block, block->begin());
@@ -440,7 +440,7 @@ bool scalehls::hasEffectOnExternalBuffer(Operation *op) {
 /// Distribute the given factor from the innermost loop of the given loop band,
 /// so that we can apply vectorize, unroll and jam, etc.
 FactorList scalehls::getDistributedFactors(
-    unsigned factor, const SmallVectorImpl<mlir::AffineForOp> &band) {
+    unsigned factor, const SmallVectorImpl<affine::AffineForOp> &band) {
   FactorList factors;
   unsigned remainFactor = factor;
 
@@ -472,7 +472,7 @@ FactorList scalehls::getDistributedFactors(
 /// This method can fail due to non-constant loop trip counts.
 LogicalResult scalehls::getEvenlyDistributedFactors(
     unsigned maxFactor, FactorList &factors,
-    const SmallVectorImpl<mlir::AffineForOp> &band,
+    const SmallVectorImpl<affine::AffineForOp> &band,
     const SmallVectorImpl<FactorList> &constrFactorsList, bool powerOf2Constr) {
 
   // auto emitFactors = [&](const FactorList &factors) {
@@ -635,7 +635,7 @@ LogicalResult scalehls::getEvenlyDistributedFactors(
 
 /// Return a pair which indicates whether the if statement is always true or
 /// false, respectively. The returned result is one-hot.
-std::pair<bool, bool> scalehls::ifAlwaysTrueOrFalse(mlir::AffineIfOp ifOp) {
+std::pair<bool, bool> scalehls::ifAlwaysTrueOrFalse(affine::AffineIfOp ifOp) {
   auto set = ifOp.getIntegerSet();
   auto operands = SmallVector<Value, 4>(ifOp.getOperands().begin(),
                                         ifOp.getOperands().end());
@@ -657,8 +657,8 @@ std::pair<bool, bool> scalehls::ifAlwaysTrueOrFalse(mlir::AffineIfOp ifOp) {
   FlatAffineValueConstraints constrs;
   constrs.addAffineIfOpDomain(ifOp);
   for (auto operand : operands)
-    if (isForInductionVar(operand)) {
-      auto iv = getForInductionVarOwner(operand);
+    if (affine::isAffineForInductionVar(operand)) {
+      auto iv = affine::getForInductionVarOwner(operand);
       if (failed(constrs.addAffineForOpDomain(iv)))
         continue;
     }
@@ -772,7 +772,7 @@ bool scalehls::crossRegionDominates(Operation *a, Operation *b) {
 // Check if the lhsOp and rhsOp are in the same block. If so, return their
 // ancestors that are located at the same block. Note that in this check,
 // AffineIfOp is transparent.
-Optional<std::pair<Operation *, Operation *>>
+std::optional<std::pair<Operation *, Operation *>>
 scalehls::checkSameLevel(Operation *lhsOp, Operation *rhsOp) {
   // If lhsOp and rhsOp are already at the same level, return true.
   if (lhsOp->getBlock() == rhsOp->getBlock())
@@ -806,7 +806,7 @@ scalehls::checkSameLevel(Operation *lhsOp, Operation *rhsOp) {
       if (lhs->getBlock() == rhs->getBlock())
         return std::pair<Operation *, Operation *>(lhs, rhs);
 
-  return Optional<std::pair<Operation *, Operation *>>();
+  return std::optional<std::pair<Operation *, Operation *>>();
 }
 
 /// Returns the number of surrounding loops common to 'loopsA' and 'loopsB',
@@ -814,8 +814,15 @@ scalehls::checkSameLevel(Operation *lhsOp, Operation *rhsOp) {
 unsigned scalehls::getCommonSurroundingLoops(Operation *A, Operation *B,
                                              AffineLoopBand *band) {
   SmallVector<AffineForOp, 4> loopsA, loopsB;
-  getLoopIVs(*A, &loopsA);
-  getLoopIVs(*B, &loopsB);
+  SmallVector<Operation *, 4> opsA, opsB;
+  affine::getEnclosingAffineOps(*A, &opsA);
+  affine::getEnclosingAffineOps(*B, &opsB);
+  for (auto *op : opsA)
+    if (auto forOp = dyn_cast<AffineForOp>(op))
+      loopsA.push_back(forOp);
+  for (auto *op : opsB)
+    if (auto forOp = dyn_cast<AffineForOp>(op))
+      loopsB.push_back(forOp);
 
   unsigned minNumLoops = std::min(loopsA.size(), loopsB.size());
   unsigned numCommonLoops = 0;
@@ -830,7 +837,7 @@ unsigned scalehls::getCommonSurroundingLoops(Operation *A, Operation *B,
 }
 
 /// Calculate the lower and upper bound of the affine map if possible.
-Optional<std::pair<int64_t, int64_t>>
+std::optional<std::pair<int64_t, int64_t>>
 scalehls::getBoundOfAffineMap(AffineMap map, ValueRange operands) {
   if (map.isSingleConstant()) {
     auto constBound = map.getSingleConstantResult();
@@ -839,7 +846,7 @@ scalehls::getBoundOfAffineMap(AffineMap map, ValueRange operands) {
 
   // For now, we can only handle one result value map.
   if (map.getNumResults() != 1)
-    return Optional<std::pair<int64_t, int64_t>>();
+    return std::optional<std::pair<int64_t, int64_t>>();
 
   auto context = map.getContext();
   SmallVector<int64_t, 4> lbs;
@@ -847,14 +854,14 @@ scalehls::getBoundOfAffineMap(AffineMap map, ValueRange operands) {
   for (auto operand : operands) {
     // Only if the affine map operands are induction variable, the calculation
     // is possible.
-    if (!isForInductionVar(operand))
-      return Optional<std::pair<int64_t, int64_t>>();
+    if (!affine::isAffineForInductionVar(operand))
+      return std::optional<std::pair<int64_t, int64_t>>();
 
     // Only if the owner for op of the induction variable has constant bound,
     // the calculation is possible.
-    auto forOp = getForInductionVarOwner(operand);
+    auto forOp = affine::getForInductionVarOwner(operand);
     if (!forOp.hasConstantBounds())
-      return Optional<std::pair<int64_t, int64_t>>();
+      return std::optional<std::pair<int64_t, int64_t>>();
 
     auto lb = forOp.getConstantLowerBound();
     auto ub = forOp.getConstantUpperBound();
@@ -880,7 +887,7 @@ scalehls::getBoundOfAffineMap(AffineMap map, ValueRange operands) {
     if (auto constExpr = newExpr.dyn_cast<AffineConstantExpr>())
       results.push_back(constExpr.getValue());
     else
-      return Optional<std::pair<int64_t, int64_t>>();
+      return std::optional<std::pair<int64_t, int64_t>>();
   }
 
   auto minmax = std::minmax_element(results.begin(), results.end());
@@ -1065,7 +1072,7 @@ void scalehls::getArrays(Block &block, SmallVectorImpl<Value> &arrays,
   }
 }
 
-Optional<unsigned> scalehls::getAverageTripCount(AffineForOp forOp) {
+std::optional<unsigned> scalehls::getAverageTripCount(AffineForOp forOp) {
   if (auto optionalTripCount = getConstantTripCount(forOp))
     return optionalTripCount.value();
   else {
@@ -1084,7 +1091,7 @@ Optional<unsigned> scalehls::getAverageTripCount(AffineForOp forOp) {
           upperBound.value().first - lowerBound.value().second;
       return (lowerTripCount + upperTripCount + 1) / 2;
     } else
-      return Optional<unsigned>();
+      return std::optional<unsigned>();
   }
 }
 

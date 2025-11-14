@@ -199,7 +199,8 @@ struct LegalizeDataflow : public LegalizeDataflowBase<LegalizeDataflow> {
     auto frozenPatterns = FrozenRewritePatternSet(std::move(patterns));
 
     func.walk([&](ScheduleOp schedule) {
-      (void)applyOpPatternsAndFold(schedule, frozenPatterns);
+      SmallVector<Operation *> ops = {schedule.getOperation()};
+      (void)applyOpPatternsAndFold(ops, frozenPatterns);
 
       if (llvm::all_of(schedule.getOps<NodeOp>(),
                        [](NodeOp node) { return node.getLevel(); }))

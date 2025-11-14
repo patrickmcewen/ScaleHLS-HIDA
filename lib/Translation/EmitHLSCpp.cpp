@@ -593,8 +593,8 @@ public:
   bool visitOp(arith::MulFOp op) { return emitter.emitBinary(op, "*"), true; }
   bool visitOp(arith::DivFOp op) { return emitter.emitBinary(op, "/"), true; }
   bool visitOp(arith::RemFOp op) { return emitter.emitBinary(op, "%"), true; }
-  bool visitOp(arith::MaxFOp op) { return emitter.emitMaxMin(op, "max"), true; }
-  bool visitOp(arith::MinFOp op) { return emitter.emitMaxMin(op, "min"), true; }
+  bool visitOp(arith::MaximumFOp op) { return emitter.emitMaxMin(op, "max"), true; }
+  bool visitOp(arith::MinimumFOp op) { return emitter.emitMaxMin(op, "min"), true; }
   bool visitOp(math::PowFOp op) { return emitter.emitMaxMin(op, "pow"), true; }
 
   /// Integer binary expressions.
@@ -1286,7 +1286,8 @@ void ModuleEmitter::emitAffineYield(AffineYieldOp op) {
         os << " = ";
         emitValue(op.getOperand(resultIdx++), rank);
         break;
-      case (arith::AtomicRMWKind::maxf):
+      case (arith::AtomicRMWKind::maximumf):
+      case (arith::AtomicRMWKind::maxnumf):
       case (arith::AtomicRMWKind::maxs):
       case (arith::AtomicRMWKind::maxu):
         os << " = max(";
@@ -1295,7 +1296,8 @@ void ModuleEmitter::emitAffineYield(AffineYieldOp op) {
         emitValue(op.getOperand(resultIdx++), rank);
         os << ")";
         break;
-      case (arith::AtomicRMWKind::minf):
+      case (arith::AtomicRMWKind::minimumf):
+      case (arith::AtomicRMWKind::minnumf):
       case (arith::AtomicRMWKind::mins):
       case (arith::AtomicRMWKind::minu):
         os << " = min(";
@@ -1385,7 +1387,8 @@ void ModuleEmitter::emitInsert(vector::InsertOp op) {
   addAlias(op.getDest(), op.getResult());
   indent();
   emitValue(op.getDest());
-  os << "[" << op.getPosition()[0].cast<IntegerAttr>().getInt() << "] = ";
+  auto staticPos = op.getStaticPosition();
+  os << "[" << staticPos[0] << "] = ";
   emitValue(op.getSource());
   os << ";";
   emitInfoAndNewLine(op);
@@ -1396,7 +1399,8 @@ void ModuleEmitter::emitExtract(vector::ExtractOp op) {
   emitValue(op.getResult());
   os << " = ";
   emitValue(op.getVector());
-  os << "[" << op.getPosition()[0].cast<IntegerAttr>().getInt() << "];";
+  auto staticPos = op.getStaticPosition();
+  os << "[" << staticPos[0] << "];";
   emitInfoAndNewLine(op);
 }
 

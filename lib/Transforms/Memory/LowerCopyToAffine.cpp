@@ -42,7 +42,7 @@ struct LowerCopy : public OpRewritePattern<memref::CopyOp> {
         ivs.push_back(constantZero);
         continue;
       }
-      auto loop = rewriter.create<mlir::AffineForOp>(loc, 0, dimSize);
+      auto loop = rewriter.create<affine::AffineForOp>(loc, 0, dimSize);
       setParallelAttr(loop);
       // If the copy op is not external, we consider the loop as point loop
       // that needs to be optimized later.
@@ -54,8 +54,8 @@ struct LowerCopy : public OpRewritePattern<memref::CopyOp> {
 
     // Create affine load/store operations.
     auto value =
-        rewriter.create<mlir::AffineLoadOp>(loc, copy.getSource(), ivs);
-    rewriter.create<mlir::AffineStoreOp>(loc, value, copy.getTarget(), ivs);
+        rewriter.create<affine::AffineLoadOp>(loc, copy.getSource(), ivs);
+    rewriter.create<affine::AffineStoreOp>(loc, value, copy.getTarget(), ivs);
 
     rewriter.eraseOp(copy);
     return success();

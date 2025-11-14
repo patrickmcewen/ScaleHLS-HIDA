@@ -65,8 +65,8 @@ void scalehls::addCreateSubviewPasses(OpPassManager &pm,
 }
 
 void scalehls::addSimplifyAffineLoopPasses(OpPassManager &pm) {
-  pm.addPass(mlir::createAffineLoopNormalizePass());
-  pm.addPass(mlir::createSimplifyAffineStructuresPass());
+  pm.addPass(affine::createAffineLoopNormalizePass());
+  pm.addPass(affine::createSimplifyAffineStructuresPass());
   pm.addPass(mlir::createCanonicalizerPass());
 }
 
@@ -174,7 +174,7 @@ void scalehls::registerHIDAPyTorchPipeline() {
         // Bufferization.
         pm.addPass(mlir::createLinalgBufferizePass());
         pm.addPass(arith::createArithBufferizePass());
-        pm.addPass(mlir::createTensorBufferizePass());
+        pm.addPass(tensor::createTensorBufferizePass());
         pm.addPass(func::createFuncBufferizePass());
         pm.addPass(bufferization::createBufferResultsToOutParamsPass());
         pm.addPass(scalehls::createBufferizeDataflowPass());
@@ -227,7 +227,7 @@ void scalehls::registerHIDAPyTorchPipeline() {
         pm.addPass(scalehls::createAffineLoopOrderOptPass());
         if (opts.loopTileSize != 1)
           pm.addPass(scalehls::createAffineLoopTilePass(opts.loopTileSize));
-        pm.addPass(mlir::createSimplifyAffineStructuresPass());
+        pm.addPass(affine::createSimplifyAffineStructuresPass());
         pm.addPass(mlir::createCanonicalizerPass());
 
         if (opts.debugPoint == 7)
@@ -238,7 +238,7 @@ void scalehls::registerHIDAPyTorchPipeline() {
         pm.addPass(scalehls::createCreateLocalBufferPass());
         pm.addPass(scalehls::createLowerCopyToAffinePass());
         pm.addPass(memref::createFoldMemRefAliasOpsPass());
-        pm.addPass(mlir::createSimplifyAffineStructuresPass());
+        pm.addPass(affine::createSimplifyAffineStructuresPass());
         pm.addPass(mlir::createCanonicalizerPass());
 
         if (opts.debugPoint == 8)
@@ -272,7 +272,7 @@ void scalehls::registerHIDAPyTorchPipeline() {
         pm.addPass(scalehls::createParallelizeDataflowNodePass(
             opts.loopUnrollFactor, /*unrollPointLoopOnly=*/true,
             opts.complexityAware, opts.correlationAware));
-        pm.addPass(mlir::createSimplifyAffineStructuresPass());
+        pm.addPass(affine::createSimplifyAffineStructuresPass());
         pm.addPass(scalehls::createLegalizeDataflowPass());
         pm.addPass(mlir::createCanonicalizerPass());
 
@@ -319,7 +319,7 @@ void scalehls::registerHIDAPyTorchPipelinePost() {
               opts.loopUnrollFactor, /*unrollPointLoopOnly=*/true));
           // pm.addPass(scalehls::createAffineLoopUnrollJamPass(
           //     opts.loopUnrollFactor, /*unrollPointLoopOnly=*/true));
-          pm.addPass(mlir::createSimplifyAffineStructuresPass());
+          pm.addPass(affine::createSimplifyAffineStructuresPass());
           pm.addPass(mlir::createCanonicalizerPass());
         }
 
@@ -398,7 +398,7 @@ void scalehls::registerHIDACppPipeline() {
         pm.addPass(scalehls::createRemoveVariableBoundPass());
         pm.addPass(scalehls::createAffineLoopOrderOptPass());
         // pm.addPass(scalehls::createAffineLoopTilePass(opts.loopTileSize));
-        pm.addPass(mlir::createSimplifyAffineStructuresPass());
+        pm.addPass(affine::createSimplifyAffineStructuresPass());
         pm.addPass(mlir::createCanonicalizerPass());
 
         if (opts.debugPoint == 7)
@@ -443,7 +443,7 @@ void scalehls::registerHIDACppPipeline() {
           pm.addPass(scalehls::createParallelizeDataflowNodePass(
               opts.loopUnrollFactor, /*unrollPointLoopOnly=*/true,
               opts.complexityAware, opts.correlationAware));
-          pm.addPass(mlir::createSimplifyAffineStructuresPass());
+          pm.addPass(affine::createSimplifyAffineStructuresPass());
           pm.addPass(mlir::createCanonicalizerPass());
         }
 

@@ -13,10 +13,10 @@ using namespace mlir;
 using namespace scalehls;
 
 namespace {
-struct RemoveRedundantIf : public OpRewritePattern<mlir::AffineIfOp> {
-  using OpRewritePattern<mlir::AffineIfOp>::OpRewritePattern;
+struct RemoveRedundantIf : public OpRewritePattern<affine::AffineIfOp> {
+  using OpRewritePattern<affine::AffineIfOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(mlir::AffineIfOp ifOp,
+  LogicalResult matchAndRewrite(affine::AffineIfOp ifOp,
                                 PatternRewriter &rewriter) const override {
     auto result = ifAlwaysTrueOrFalse(ifOp);
 

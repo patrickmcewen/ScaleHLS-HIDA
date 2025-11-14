@@ -12,18 +12,18 @@ using namespace scalehls;
 using namespace hls;
 
 namespace {
-struct MaterializeReductionPattern : public OpRewritePattern<AffineForOp> {
-  using OpRewritePattern<AffineForOp>::OpRewritePattern;
+struct MaterializeReductionPattern : public OpRewritePattern<affine::AffineForOp> {
+  using OpRewritePattern<affine::AffineForOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(AffineForOp loop,
+  LogicalResult matchAndRewrite(affine::AffineForOp loop,
                                 PatternRewriter &rewriter) const override {
     if (!loop.getNumIterOperands())
       return success();
     auto loc = rewriter.getUnknownLoc();
-    auto yield = cast<AffineYieldOp>(loop.getBody()->getTerminator());
+    auto yield = cast<affine::AffineYieldOp>(loop.getBody()->getTerminator());
 
     // Traverse all iteration values.
-    for (auto zip : llvm::zip(loop.getIterOperands(), loop.getRegionIterArgs(),
+    for (auto zip : llvm::zip(loop.getInits(), loop.getRegionIterArgs(),
                               yield.getOperands(), loop.getResults())) {
       auto iterOperand = std::get<0>(zip);
       auto iterArg = std::get<1>(zip);
@@ -36,27 +36,27 @@ struct MaterializeReductionPattern : public OpRewritePattern<AffineForOp> {
       auto map = rewriter.getConstantAffineMap(0);
       rewriter.setInsertionPoint(loop);
       auto buf = rewriter.create<BufferOp>(loc, memrefType);
-      rewriter.create<AffineStoreOp>(loc, iterOperand, buf, map, ValueRange());
+      rewriter.create<affine::AffineStoreOp>(loc, iterOperand, buf, map, ValueRange());
 
       // Load the iteration value from the buffer at the begining of loop and
       // replace all uses.
       rewriter.setInsertionPointToStart(loop.getBody());
-      auto partial = rewriter.create<AffineLoadOp>(loc, buf, map, ValueRange());
+      auto partial = rewriter.create<affine::AffineLoadOp>(loc, buf, map, ValueRange());
       iterArg.replaceAllUsesWith(partial);
 
       // Update the state of the buffer at the end of loop.
       rewriter.setInsertionPoint(yield);
-      rewriter.create<AffineStoreOp>(loc, yieldOperand, buf, map, ValueRange());
+      rewriter.create<affine::AffineStoreOp>(loc, yieldOperand, buf, map, ValueRange());
 
       // Load from the buffer after the loop and replace all uses.
       rewriter.setInsertionPointAfter(loop);
-      auto result = rewriter.create<AffineLoadOp>(loc, buf, map, ValueRange());
+      auto result = rewriter.create<affine::AffineLoadOp>(loc, buf, map, ValueRange());
       yieldResult.replaceAllUsesWith(result);
     }
 
     // Create a new loop without iteration operands.
     rewriter.setInsertionPoint(loop);
-    auto newLoop = rewriter.create<AffineForOp>(
+    auto newLoop = rewriter.create<affine::AffineForOp>(
         loop.getLoc(), loop.getLowerBoundOperands(), loop.getLowerBoundMap(),
         loop.getUpperBoundOperands(), loop.getUpperBoundMap(), loop.getStep());
     auto &loopOps = loop.getBody()->getOperations();

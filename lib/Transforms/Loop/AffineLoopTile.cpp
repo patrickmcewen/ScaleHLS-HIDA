@@ -93,7 +93,7 @@ void scalehls::adjustToDivisorsOfTripCounts(
   assert(band.size() == tileSizes->size() && "invalid tile size count");
   for (unsigned i = 0, e = band.size(); i < e; i++) {
     unsigned &tSizeAdjusted = (*tileSizes)[i];
-    Optional<uint64_t> mayConst = getConstantTripCount(band[i]);
+    std::optional<uint64_t> mayConst = getConstantTripCount(band[i]);
     if (!mayConst)
       continue;
 

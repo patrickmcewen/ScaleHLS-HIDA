@@ -45,8 +45,8 @@ void ScaleHLSEstimator::getPartitionIndices(Operation *op) {
   for (auto operand : accessMap.getOperands()) {
     if (operandIdx < accessMap.getNumDims()) {
       int64_t step = 1;
-      if (isForInductionVar(operand))
-        step = getForInductionVarOwner(operand).getStep();
+      if (affine::isAffineForInductionVar(operand))
+        step = affine::getForInductionVarOwner(operand).getStep();
 
       dimReplacements.push_back(step * builder.getAffineDimExpr(operandIdx));
     } else {
@@ -308,7 +308,16 @@ int64_t ScaleHLSEstimator::getDepMinII(int64_t II, func::FuncOp func,
 int64_t ScaleHLSEstimator::getDepMinII(int64_t II, AffineForOp forOp,
                                        MemAccessesMap &map) {
   AffineLoopBand band;
-  getLoopIVs(forOp.front(), &band);
+  Block *body = forOp.getBody();
+  if (body->empty())
+    return II;
+  Operation *firstOp = &body->front();
+  SmallVector<Operation *, 4> ops;
+  affine::getEnclosingAffineOps(*firstOp, &ops);
+  for (Operation *op : ops) {
+    if (auto forOp = dyn_cast<affine::AffineForOp>(op))
+      band.push_back(forOp);
+  }
 
   // Find all loop levels whose dependency need to be checked.
   SmallVector<unsigned, 8> loopDepths;
@@ -652,7 +661,7 @@ TimingAttr ScaleHLSEstimator::estimateBlock(Block &block, int64_t begin) {
     // Loop shouldn't overlap with any other scheduled operations. The rationale
     // here is in Vivado HLS, a loop will always be blocked by other operations
     // before it, even if no actual dependency exists between them.
-    if (isa<mlir::AffineForOp>(op))
+    if (isa<affine::AffineForOp>(op))
       opBegin = max(opBegin, blockEnd);
 
     // Check memory dependencies of the operation and update schedule level.

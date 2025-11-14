@@ -436,7 +436,8 @@ struct BufferVectorize : public BufferVectorizeBase<BufferVectorize> {
 
     mlir::RewritePatternSet patterns(context);
     patterns.add<MaterializeTileLayout>(context);
-    (void)applyOpPatternsAndFold(func, std::move(patterns));
+    SmallVector<Operation *> ops = {func.getOperation()};
+    (void)applyOpPatternsAndFold(ops, std::move(patterns));
 
     patterns.clear();
     patterns.add<VectorizeNode>(context);

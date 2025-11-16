@@ -720,9 +720,11 @@ bool FuncDesignSpace::exportParetoDesigns(unsigned outputNum,
 
       // Clone a new function (with its module) and apply optimization.
       auto tmpFunc = cloneFunctionWithModule(func);
+      //dumpFuncMLIR(tmpFunc, "before_optimized_func_design_point", false);
       if (!applyOptStrategy(tmpFunc, tileLists, targetIIs))
         return false;
       estimator.estimateFunc(tmpFunc);
+      //dumpFuncMLIR(tmpFunc, "after_optimized_func_design_point", false);
 
       //dumpFuncMLIR(func, "post_optimized_func_design_point", false);
 
@@ -847,7 +849,9 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
   // Base case: if there are no sub functions, just explore the loop design space of the current function.
   if (subHierFuncDesignSpaces.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "No sub functions found in function '" << func.getName() << "', exploring the loop design space...\n";);
+    //dumpFuncMLIR(func, "before_explore_loop_design_space", false);
     auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath);
+    //dumpFuncMLIR(func, "after_explore_loop_design_space", false);
     setFuncDesignSpace(newFuncDesignSpace);
     for (auto &funcPoint : newFuncDesignSpace.paretoPoints) {
       auto newHierFuncPoint = createHierFuncDesignPoint(funcPoint);
@@ -1027,6 +1031,7 @@ bool HierFuncDesignSpace::applyOptStrategyRecursive(func::FuncOp currentFunc, Hi
   if (!applyOptStrategy(currentFunc, tileLists, targetIIs)){
     llvm::errs() << "[DSE] ERROR: Failed to apply optimization strategies to the current function '"
                  << currentFunc.getName() << "'\n";
+    //dumpFuncMLIR(currentFunc, "failed_optimized_func", true);
     return false;
   }
   //LLVM_DEBUG(llvm::dbgs() << "Optimization strategies applied to the current function '"
@@ -1069,13 +1074,13 @@ bool HierFuncDesignSpace::exportParetoDesigns(unsigned outputNum,
     if (sampleIndex % sampleStep == 0) {
       // Clone function with its module to preserve symbol table
       // Clone the module and cast to ModuleOp
-      auto clonedOp = topModule->clone();
-      ModuleOp tmpModule = cast<ModuleOp>(clonedOp);
-      auto tmpFunc = getSubFuncFromModule(tmpModule, func.getName());
+      auto tmpFunc = cloneFunctionWithModule(func);
+      auto tmpModule = tmpFunc->getParentOfType<ModuleOp>();
 
+      //dumpFuncMLIR(tmpFunc, "before_optimized_func_hier", false);
       if (!applyOptStrategyRecursive(tmpFunc, hierFuncPoint, tmpModule, sampleIndex))
         return false;
-      
+      //dumpFuncMLIR(tmpFunc, "after_optimized_func_hier", false);
       estimator.estimateFunc(tmpFunc);
 
       // Parse a new output file.
@@ -1390,10 +1395,10 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
   funcSpace.dumpFuncDesignSpace(funcCsvFilePath);
 
   // Export sampled pareto points MLIR source.
-  //funcSpace.exportParetoDesigns(outputNum, outputRootPath);
+  /*funcSpace.exportParetoDesigns(outputNum, outputRootPath);
 
   // Apply the best function design point under the constraints.
-  /*for (auto &funcPoint : funcSpace.paretoPoints) {
+  for (auto &funcPoint : funcSpace.paretoPoints) {
     if (funcPoint.dspNum <= maxDspNum) {
       std::vector<FactorList> tileLists;
       std::vector<unsigned> targetIIs;
@@ -1463,7 +1468,9 @@ void ScaleHLSExplorer::applyDesignSpaceExplore(func::FuncOp func,
   // Explore the design space through a multiple level approach.
   //if (!exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath))
   //  return;
+  //dumpFuncMLIR(func, "before_explore_hier_design_space", false);
   auto hierFuncSpace = exploreHierDesignSpace(func, directiveOnly, outputRootPath, csvRootPath);
+  //dumpFuncMLIR(func, "after_explore_hier_design_space", false);
   hierFuncSpace.exportParetoDesigns(outputNum, outputRootPath, topModule);
 }
 

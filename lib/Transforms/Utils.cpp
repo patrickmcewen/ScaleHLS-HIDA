@@ -91,6 +91,17 @@ bool scalehls::applyOptStrategy(AffineLoopBand &band, func::FuncOp func,
   return true;
 }
 
+/*static void emitTileListDebugInfo(FactorList tileList) {
+  LLVM_DEBUG(llvm::dbgs() << "Tile info: (";
+             for (unsigned i = 0, e = tileList.size(); i < e; ++i) {
+               llvm::dbgs() << tileList[i];
+               if (i != e - 1)
+                 llvm::dbgs() << ",";
+               else
+                 llvm::dbgs() << ")\n";
+             });
+}*/
+
 /// Apply optimization strategy to a function.
 bool scalehls::applyOptStrategy(func::FuncOp func,
                                 ArrayRef<FactorList> tileLists,
@@ -102,12 +113,19 @@ bool scalehls::applyOptStrategy(func::FuncOp func,
 
   // Apply loop tiling to all loop bands.
   for (unsigned i = 0, e = bands.size(); i < e; ++i)
+  {
+    //LLVM_DEBUG(llvm::dbgs() << "Applying loop tiling to band " << i << "\n";);
+    //emitTileListDebugInfo(tileLists[i]);
     if (!applyLoopTiling(bands[i], tileLists[i]))
       return false;
+  }
 
   for (unsigned i = 0, e = bands.size(); i < e; ++i)
+  {
+    //LLVM_DEBUG(llvm::dbgs() << "Applying loop pipelining to band " << i << "\n";);
     if (!applyLoopPipelining(bands[i], bands[i].size() - 1, targetIIs[i]))
       return false;
+  }
 
   // Apply memory access optimizations and the best suitable array partition
   // strategy to the function.

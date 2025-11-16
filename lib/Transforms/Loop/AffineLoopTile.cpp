@@ -9,6 +9,9 @@
 #include "mlir/Dialect/Affine/Utils.h"
 #include "scalehls/Transforms/Passes.h"
 #include "scalehls/Transforms/Utils.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "scalehls"
 
 using namespace mlir;
 using namespace scalehls;
@@ -19,8 +22,10 @@ using namespace hls;
 bool scalehls::applyLoopTiling(AffineLoopBand &band, FactorList tileList,
                                bool loopNormalize, bool annotatePointLoop) {
   assert(!band.empty() && "no loops provided");
-  if (!isPerfectlyNested(band))
+  if (!isPerfectlyNested(band)) {
+    LLVM_DEBUG(llvm::dbgs() << "Returning false because band is not perfectly nested\n";);
     return false;
+  }
 
   // If all tile sizes are one, we don't need to do anything but annotating all
   // loops as point loop.
@@ -40,7 +45,10 @@ bool scalehls::applyLoopTiling(AffineLoopBand &band, FactorList tileList,
   // Apply loop tiling.
   AffineLoopBand tiledBand;
   if (failed(tilePerfectlyNested(band, tileList, &tiledBand)))
+  {
+    LLVM_DEBUG(llvm::dbgs() << "Failed to tile perfectly nested band\n";);
     return false;
+  }
 
   // Get the tile loop band and point loop band.
   AffineLoopBand pointBand(std::next(tiledBand.begin(), originalBandSize),

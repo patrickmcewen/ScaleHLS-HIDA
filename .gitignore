@@ -18,3 +18,4 @@ build
 *.log
 *.csv
 *.zip
+mlir_venv/

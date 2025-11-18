@@ -149,6 +149,67 @@ TaskOp scalehls::fuseOpsIntoTask(ArrayRef<Operation *> ops,
                    std::prev(subTaskOps.end()));
     rewriter.replaceOp(subTask, subTask.getYieldOp()->getOperands());
   }
+
+  // Reorder operations to respect data dependencies.
+  // This fixes cases where operations are fused but end up in wrong order
+  // (e.g., when a reduction is fused after operations that use its result).
+  auto &taskOps = task.getBody().front().getOperations();
+  
+  // Simple bubble-sort-like algorithm: keep moving operations earlier
+  // until all operands are defined before their uses
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    
+    for (auto it = taskOps.begin(), end = taskOps.end(); it != end; ++it) {
+      auto *op = &*it;
+      if (isa<YieldOp>(op))
+        continue;
+      
+      Operation *targetPos = nullptr;
+      
+      // Case 1: Check if any operand is defined after this op
+      for (auto operand : op->getOperands()) {
+        auto *defOp = operand.getDefiningOp();
+        if (defOp && defOp->getParentOp() == task) {
+          if (!defOp->isBeforeInBlock(op)) {
+            // defOp comes after op, we need op after defOp
+            if (!targetPos || defOp->isBeforeInBlock(targetPos)) {
+              targetPos = defOp;
+            }
+          }
+        }
+      }
+      
+      // Case 2: Check if any user comes before this op
+      for (auto result : op->getResults()) {
+        for (auto *user : result.getUsers()) {
+          if (user->getParentOp() == task && !isa<YieldOp>(user)) {
+            if (!op->isBeforeInBlock(user)) {
+              // user comes before op, we need op before user
+              if (!targetPos || user->isBeforeInBlock(targetPos)) {
+                targetPos = user;
+              }
+            }
+          }
+        }
+      }
+      
+      // Move op to the appropriate position
+      if (targetPos) {
+        if (!op->isBeforeInBlock(targetPos)) {
+          // targetPos is before op, move op before targetPos
+          op->moveBefore(targetPos);
+        } else {
+          // targetPos is after op, move op after targetPos
+          op->moveAfter(targetPos);
+        }
+        changed = true;
+        break; // Restart from beginning
+      }
+    }
+  }
+  
   return task;
 }
 

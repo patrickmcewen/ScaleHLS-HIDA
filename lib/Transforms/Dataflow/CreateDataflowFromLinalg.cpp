@@ -143,10 +143,10 @@ struct BackwardFuseGenericOp : public OpRewritePattern<linalg::GenericOp> {
 
   LogicalResult matchAndRewrite(linalg::GenericOp op,
                                 PatternRewriter &rewriter) const override {
-    if (isElementwiseGenericOp(op)) {
+    //if (isElementwiseGenericOp(op)) {
       auto pattern = BackwardFuseOp<linalg::GenericOp>(getContext());
       return pattern.matchAndRewrite(op, rewriter);
-    }
+    //}
     return failure();
   }
 };

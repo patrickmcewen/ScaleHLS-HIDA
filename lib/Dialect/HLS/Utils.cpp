@@ -168,20 +168,7 @@ TaskOp scalehls::fuseOpsIntoTask(ArrayRef<Operation *> ops,
       
       Operation *targetPos = nullptr;
       
-      // Case 1: Check if any operand is defined after this op
-      for (auto operand : op->getOperands()) {
-        auto *defOp = operand.getDefiningOp();
-        if (defOp && defOp->getParentOp() == task) {
-          if (!defOp->isBeforeInBlock(op)) {
-            // defOp comes after op, we need op after defOp
-            if (!targetPos || defOp->isBeforeInBlock(targetPos)) {
-              targetPos = defOp;
-            }
-          }
-        }
-      }
-      
-      // Case 2: Check if any user comes before this op
+      // Check if any user comes before this op
       for (auto result : op->getResults()) {
         for (auto *user : result.getUsers()) {
           if (user->getParentOp() == task && !isa<YieldOp>(user)) {

@@ -6,8 +6,12 @@
 
 #include "mlir/IR/Dominance.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "scalehls/Transforms/Passes.h"
 #include "scalehls/Transforms/Utils.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "scalehls"
 
 using namespace mlir;
 using namespace scalehls;
@@ -131,8 +135,45 @@ struct ConvertGetGlobalToConstBuffer
 
   LogicalResult matchAndRewrite(memref::GetGlobalOp op,
                                 PatternRewriter &rewriter) const override {
+    LLVM_DEBUG(llvm::dbgs() << "ConvertGetGlobalToConstBuffer: " << op << "\n");
+    // Only convert to const buffer if the result is never written to.
+    // Const buffers are read-only and cannot be used as outputs.
+    for (auto &use : op->getUses()) {
+      LLVM_DEBUG(llvm::dbgs() << "  Use #" << use.getOperandNumber() 
+                              << " in: " << *use.getOwner() 
+                              << ", written: " << isWritten(use) << "\n");
+      
+      // Be conservative: if the memref is used in a linalg operation, don't
+      // convert to const buffer. The Linalg-to-Affine conversion pass might
+      // incorrectly reuse const buffers as outputs during the conversion,
+      // leading to "const buffer cannot be written" errors.
+      // This is a conservative check to avoid that issue.
+      if (isa<linalg::LinalgOp>(use.getOwner())) {
+        auto linalgOp = cast<linalg::LinalgOp>(use.getOwner());
+        // Check if this is used as an output operand (explicitly written)
+        auto operandIdx = use.getOperandNumber();
+        if (operandIdx >= linalgOp.getNumInputs() && 
+            operandIdx < linalgOp.getNumInputs() + linalgOp.getNumOutputs()) {
+          LLVM_DEBUG(llvm::dbgs() << "  Use is an output operand of linalg op, not converting\n");
+          return failure();
+        }
+        // Even for input operands, be conservative and don't convert if used
+        // in a linalg op that will be converted to affine loops (potential for
+        // buffer reuse bug during conversion).
+        LLVM_DEBUG(llvm::dbgs() << "  Use is an input operand of linalg op, "
+                                   "conservatively not converting to avoid issues "
+                                   "during Linalg-to-Affine conversion\n");
+        return failure();
+      }
+    }
+    if (llvm::any_of(op->getUses(), isWritten)) {
+      LLVM_DEBUG(llvm::dbgs() << "ConvertGetGlobalToConstBuffer: " << op << " is written to\n");
+      return failure();
+    }
+    
     auto global = SymbolTable::lookupNearestSymbolFrom<memref::GlobalOp>(
         op, op.getNameAttr());
+    
     rewriter.replaceOpWithNewOp<ConstBufferOp>(op, global.getType(),
                                                global.getConstantInitValue());
     return success();

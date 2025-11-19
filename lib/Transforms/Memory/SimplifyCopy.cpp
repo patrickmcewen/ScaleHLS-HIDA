@@ -29,6 +29,19 @@ struct SplitElementwiseGenericOp : public OpRewritePattern<linalg::GenericOp> {
       if (input.get() == output.get())
         return failure();
 
+      // memref.copy requires identical shapes. Check that input and output
+      // have matching shapes before converting to memref.copy.
+      auto inputType = input.get().getType().dyn_cast<MemRefType>();
+      auto outputType = output.get().getType().dyn_cast<MemRefType>();
+      if (!inputType || !outputType)
+        return failure();
+      
+      // Check that shapes match (required for memref.copy)
+      if (inputType.getShape() != outputType.getShape() ||
+          inputType.getElementType() != outputType.getElementType() ||
+          inputType.getMemorySpaceAsInt() != outputType.getMemorySpaceAsInt())
+        return failure();
+
       rewriter.create<memref::CopyOp>(op.getLoc(), input.get(), output.get());
       input.set(output.get());
       return success();

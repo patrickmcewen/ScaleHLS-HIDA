@@ -429,15 +429,23 @@ bool ScaleHLSEstimator::visitOp(AffineForOp op, int64_t begin) {
   // Set an attribute indicating the trip count. For now, we assume all loops
   // have static loop bound.
   auto optionalTripCount = getAverageTripCount(op);
-  if (!optionalTripCount)
+  if (!optionalTripCount) {
+    llvm::errs() << "[DEBUG visitOp AffineForOp] ERROR: Cannot determine trip count for loop:\n";
+    op->dump();
+    llvm::errs() << "[DEBUG visitOp AffineForOp] Loop location: " << op->getLoc() << "\n";
     return false;
+  }
   auto tripCount = optionalTripCount.value();
 
   // Estimate the contained loop block.
   auto &loopBlock = *op.getBody();
   auto timing = estimateBlock(loopBlock, begin);
-  if (!timing)
+  if (!timing) {
+    llvm::errs() << "[DEBUG visitOp AffineForOp] ERROR: Failed to estimate loop block for loop:\n";
+    op->dump();
+    llvm::errs() << "[DEBUG visitOp AffineForOp] Loop location: " << op->getLoc() << "\n";
     return false;
+  }
 
   assert(begin == timing.getBegin() && "unexpected estimation result");
   auto end = timing.getEnd();
@@ -760,6 +768,9 @@ TimingAttr ScaleHLSEstimator::estimateBlock(Block &block, int64_t begin) {
       if (dispatchVisitor(op, opBegin))
         opEnd = max(opEnd, getTiming(op).getEnd());
       else {
+        llvm::errs() << "[DEBUG estimateBlock] ERROR: Failed to estimate operation:\n";
+        op->dump();
+        llvm::errs() << "[DEBUG estimateBlock] Operation location: " << op->getLoc() << "\n";
         op->emitError("Failed to estimate op");
         return TimingAttr();
       }
@@ -902,8 +913,12 @@ void ScaleHLSEstimator::estimateFunc(func::FuncOp func) {
 
   // Recursively estimate blocks in the function.
   auto timing = estimateBlock(func.front());
-  if (!timing)
+  if (!timing) {
+    llvm::errs() << "[DEBUG estimateFunc] ERROR: Failed to estimate function '"
+                 << func.getName() << "' - estimateBlock returned null\n";
+    func->dump();
     return;
+  }
 
   auto latency = timing.getEnd() + 2;
   auto interval = latency;

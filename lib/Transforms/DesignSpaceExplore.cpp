@@ -6,6 +6,7 @@
 
 #include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/Analysis/Utils.h"
+#include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Support/FileUtilities.h"
 #include "scalehls/Transforms/Explorer.h"
 #include "scalehls/Transforms/Passes.h"
@@ -1113,7 +1114,22 @@ bool ScaleHLSExplorer::emitQoRDebugInfo(func::FuncOp func,
                                         std::string message) {
   estimator.estimateFunc(func);
   // auto latency = getTiming(func).getLatency();
-  auto dspNum = getResource(func).getDsp();
+  
+  // Debug: Check what getResource returns
+  auto resource = getResource(func);
+  llvm::dbgs() << "[DEBUG emitQoRDebugInfo] Function: " << func.getName() << "\n";
+  llvm::dbgs() << "[DEBUG emitQoRDebugInfo] Resource attribute: " << resource << "\n";
+  if (!resource) {
+    llvm::dbgs() << "[DEBUG emitQoRDebugInfo] ERROR: Resource attribute is null!\n";
+    llvm::dbgs() << "[DEBUG emitQoRDebugInfo] Function attributes: ";
+    func->dump();
+    llvm::dbgs() << "\n";
+    assert(false && "Resource attribute is null after estimation");
+  }
+  
+  llvm::dbgs() << "[DEBUG emitQoRDebugInfo] About to call getDsp()...\n";
+  auto dspNum = resource.getDsp();
+  llvm::dbgs() << "[DEBUG emitQoRDebugInfo] getDsp() returned: " << dspNum << "\n";
 
   LLVM_DEBUG(llvm::dbgs() << message + "\n";
              //  llvm::dbgs() << "The clock cycle is " << Twine(latency)
@@ -1358,7 +1374,32 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
   //func::FuncOp tmpFunc = func;
   AffineLoopBands targetBands;
   getLoopBands(tmpFunc.front(), targetBands);
-  unsigned targetNum = targetBands.size();
+  
+  // Try to perfect non-perfectly-nested loop bands before processing.
+  // This attempts to sink operations between loops into the innermost loop.
+  AffineLoopBands processedBands;
+  for (auto &band : targetBands) {
+    if (isPerfectlyNested(band)) {
+      processedBands.push_back(band);
+    } else {
+      // Try to apply loop perfection to make it perfectly nested.
+      LLVM_DEBUG(llvm::dbgs() << "Attempting to perfect non-perfectly-nested loop band in function '" 
+                               << func.getName() << "'\n";);
+      if (applyAffineLoopPerfection(band)) {
+        // Check if it's now perfectly nested after perfection.
+        processedBands.push_back(band);
+        if (!isPerfectlyNested(band)) {
+          LLVM_DEBUG(llvm::dbgs() << "Loop perfection applied but band is still not perfectly nested (likely due to scf.if or other unsupported operations)\n";); 
+          assert(false && "Loop perfection applied but band is still not perfectly nested");
+        }
+      } else {
+        LLVM_DEBUG(llvm::dbgs() << "Failed to apply loop perfection (likely due to unsupported operations like scf.if)\n";);
+        assert(false && "Failed to apply loop perfection");
+      }
+    }
+  }
+  
+  unsigned targetNum = processedBands.size();
 
   //llvm::errs() << "[DSE] Found " << targetNum << " loop band(s) in function '" 
   //              << func.getName() << "'\n";

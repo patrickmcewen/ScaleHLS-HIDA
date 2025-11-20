@@ -7,6 +7,8 @@
 #ifndef SCALEHLS_TRANSFORMS_EXPLORER_H
 #define SCALEHLS_TRANSFORMS_EXPLORER_H
 
+#include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
+#include "mlir/Dialect/Affine/LoopUtils.h"
 #include "scalehls/Transforms/Estimator.h"
 #include <vector>
 #include <optional>
@@ -135,9 +137,18 @@ public:
     AffineLoopBands targetBands;
     getLoopBands(func.front(), targetBands);
 
+    // Try to perfect non-perfectly-nested loop bands, matching what we do in exploreDesignSpace.
     for (auto &band : targetBands) {
-      targetLoops.push_back(band.front());
-      band.front()->setAttr("no_touch", BoolAttr::get(func.getContext(), true));
+      if (isPerfectlyNested(band)) {
+        targetLoops.push_back(band.front());
+        band.front()->setAttr("no_touch", BoolAttr::get(func.getContext(), true));
+      } else {
+        // Try to apply loop perfection to make it perfectly nested.
+        if (applyAffineLoopPerfection(band) && isPerfectlyNested(band)) {
+          targetLoops.push_back(band.front());
+          band.front()->setAttr("no_touch", BoolAttr::get(func.getContext(), true));
+        }
+      }
     }
   }
 

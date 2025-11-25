@@ -234,7 +234,7 @@ public:
     return funcDesignSpace.has_value();
   }
 
-  void combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool directiveOnly, StringRef outputRootPath, StringRef csvRootPath);
+  void combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool directiveOnly, StringRef outputRootPath, StringRef csvRootPath, bool isTop);
   func::FuncOp getSubFunc(func::FuncOp func, StringRef subFuncName);
   func::FuncOp getSubFuncFromModule(ModuleOp module, StringRef subFuncName);
   bool applyOptStrategyRecursive(func::FuncOp func, HierFuncDesignPoint hierFuncPoint, ModuleOp parentModule, unsigned sampleIndex);
@@ -276,10 +276,10 @@ public:
   bool simplifyLoopNests(func::FuncOp func);
   bool optimizeLoopBands(func::FuncOp func, bool directiveOnly);
   FuncDesignSpace exploreDesignSpace(func::FuncOp func, bool directiveOnly,
-                          StringRef outputRootPath, StringRef csvRootPath);
+                          StringRef outputRootPath, StringRef csvRootPath, bool isTop);
 
   HierFuncDesignSpace exploreHierDesignSpace(func::FuncOp func, bool directiveOnly,
-                              StringRef outputRootPath, StringRef csvRootPath);
+                              StringRef outputRootPath, StringRef csvRootPath, bool isTop);
 
   void applyDesignSpaceExplore(func::FuncOp func, bool directiveOnly,
                                StringRef outputRootPath, StringRef csvRootPath);

@@ -843,7 +843,7 @@ HierFuncDesignPoint createHierFuncDesignPoint(FuncDesignPoint funcPoint) {
   return HierFuncDesignPoint(latency, dspNum, funcPoint);
 }
 
-void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool directiveOnly, StringRef outputRootPath, StringRef csvRootPath) {
+void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool directiveOnly, StringRef outputRootPath, StringRef csvRootPath, bool isTop) {
   LLVM_DEBUG(llvm::dbgs() << "\nCombine the function design spaces for function '"
                           << func.getName() << "'...\n";);
 
@@ -851,7 +851,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
   if (subHierFuncDesignSpaces.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "No sub functions found in function '" << func.getName() << "', exploring the loop design space...\n";);
     //dumpFuncMLIR(func, "before_explore_loop_design_space", false);
-    auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath);
+    auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath, false); // if top function has no hierarchy, explore its space no matter what
     //dumpFuncMLIR(func, "after_explore_loop_design_space", false);
     setFuncDesignSpace(newFuncDesignSpace);
     for (auto &funcPoint : newFuncDesignSpace.paretoPoints) {
@@ -887,7 +887,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
     }
 
     // Explore the loop design space of the current function for the given configurations of sub functions
-    auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath);
+    auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath, isTop);
     setFuncDesignSpace(newFuncDesignSpace);
     for (auto &funcPoint : newFuncDesignSpace.paretoPoints) {
       auto newHierFuncPoint = createHierFuncDesignPoint(funcPoint, subHierFuncPoints);
@@ -932,7 +932,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
         // Estimate the top-level function and generate a new hierarchical function design point.
         hierFuncPoint.subHierFuncDesignPoints[i] = subHierFuncPoint;
         // Explore the loop design space of the current function for the given configurations of sub functions
-        auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath);
+        auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath, isTop);
         setFuncDesignSpace(newFuncDesignSpace);
         for (auto &funcPoint : newFuncDesignSpace.paretoPoints) {
           auto newHierFuncPoint = createHierFuncDesignPoint(funcPoint, hierFuncPoint.subHierFuncDesignPoints);
@@ -1297,7 +1297,7 @@ bool ScaleHLSExplorer::optimizeLoopBands(func::FuncOp func,
 
 HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, bool directiveOnly,
                                               StringRef outputRootPath,
-                                              StringRef csvRootPath) {
+                                              StringRef csvRootPath, bool isTop) {
   LLVM_DEBUG(llvm::dbgs() << "----------\nStage3: Conduct hierarchical function "
                              "design space exploration for function '"
                              << func.getName() << "'...\n";);
@@ -1344,7 +1344,7 @@ HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, 
     
     LLVM_DEBUG(llvm::dbgs() << "Exploring hierarchical function design space for sub function '"
                             << calleeName << "'...\n";);
-    auto subHierFuncSpace = exploreHierDesignSpace(subFunc, directiveOnly, outputRootPath, csvRootPath);
+    auto subHierFuncSpace = exploreHierDesignSpace(subFunc, directiveOnly, outputRootPath, csvRootPath, false);
     subHierFuncDesignSpaces.push_back(subHierFuncSpace);
   });
   
@@ -1354,7 +1354,7 @@ HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, 
   // STEP : Combine function design spaces into current hierarchical function design space.
   //dumpFuncMLIR(func, "post_explore_design_space", false);
   HierFuncDesignSpace hierFuncSpace = HierFuncDesignSpace(func, subHierFuncDesignSpaces, estimator, maxDspNum);
-  hierFuncSpace.combFuncDesignSpaces(*this, directiveOnly, outputRootPath, csvRootPath);
+  hierFuncSpace.combFuncDesignSpaces(*this, directiveOnly, outputRootPath, csvRootPath, isTop);
 
   hierFuncSpace.dumpHierFuncDesignSpace(csvRootPath.str() + "function_hier_output/" + func.getName().str() + "_space.csv");
 
@@ -1364,7 +1364,7 @@ HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, 
 /// DSE Stage3: Explore the function design space through dynamic programming.
 FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool directiveOnly,
                                           StringRef outputRootPath,
-                                          StringRef csvRootPath) {
+                                          StringRef csvRootPath, bool isTop) {
   //LLVM_DEBUG(llvm::dbgs() << "----------\nStage3: conduct single function design "
   //                           "space exploration...\n";);
 
@@ -1412,8 +1412,9 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
         LoopDesignSpace(tmpFunc, targetBands[i], estimator, maxDspNum,
                         maxExplParallel, maxLoopParallel, directiveOnly);
 
+    unsigned initParallel = isTop ? 1 : maxInitParallel;
     //LLVM_DEBUG(llvm::dbgs() << "Loop band " << i << ": ";);
-    space.initializeLoopDesignSpace(maxInitParallel);
+    space.initializeLoopDesignSpace(initParallel);
 
     //LLVM_DEBUG(llvm::dbgs() << "Loop band " << i << ": ";);
     space.exploreLoopDesignSpace(maxIterNum, maxDistance);
@@ -1511,7 +1512,7 @@ void ScaleHLSExplorer::applyDesignSpaceExplore(func::FuncOp func,
   //if (!exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath))
   //  return;
   //dumpFuncMLIR(func, "before_explore_hier_design_space", false);
-  auto hierFuncSpace = exploreHierDesignSpace(func, directiveOnly, outputRootPath, csvRootPath);
+  auto hierFuncSpace = exploreHierDesignSpace(func, directiveOnly, outputRootPath, csvRootPath, true);
   //dumpFuncMLIR(func, "after_explore_hier_design_space", false);
   hierFuncSpace.exportParetoDesigns(outputNum, outputRootPath, topModule);
 }

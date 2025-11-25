@@ -899,6 +899,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
     LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the first sub function " << subHierFuncDesignSpaces[0].func.getName() << "\n";);
   }
+  updateParetoPoints(paretoPoints, maxDspNum);
   LLVM_DEBUG(llvm::dbgs() << "Done traversing all design points of the first sub function " << subHierFuncDesignSpaces[0].func.getName() << ". There are now " << paretoPoints.size() << " pareto points in the current function design space.\n";);
 
   // Loop over the rest of the sub function design spaces.

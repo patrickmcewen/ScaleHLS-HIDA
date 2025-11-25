@@ -27,6 +27,7 @@ enum AffineFusionMode { Greedy, ProducerConsumer, Sibling };
 enum CreateSubviewMode { Point, Reduction };
 
 void registerScaleHLSDSEPipeline();
+void registerScaleHLSNoDSEPipeline();
 void registerHIDAPyTorchDSEPipeline();
 void registerHIDAPyTorchPipeline();
 void registerHIDAPyTorchPipelinePost();

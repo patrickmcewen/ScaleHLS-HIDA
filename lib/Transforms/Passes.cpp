@@ -65,6 +65,18 @@ void scalehls::registerScaleHLSDSEPipeline() {
       });
 }
 
+void scalehls::registerScaleHLSNoDSEPipeline() {
+  PassPipelineRegistration<ScaleHLSDSEPipelineOptions>(
+      "scalehls-no-dse-pipeline",
+      "Compile C/C++ kernel without design space exploration",
+      [](OpPassManager &pm, const ScaleHLSDSEPipelineOptions &opts) {
+        pm.addPass(scalehls::createFuncPreprocessPass(opts.hlsTopFunc));
+        pm.addPass(scalehls::createMaterializeReductionPass());
+        pm.addPass(scalehls::createAffineLoopPerfectionPass());
+        pm.addPass(scalehls::createQoREstimationPass(opts.dseTargetSpec));
+      });
+}
+
 void scalehls::addCreateSubviewPasses(OpPassManager &pm,
                                       CreateSubviewMode mode) {
   pm.addPass(scalehls::createCreateMemrefSubviewPass(mode));
@@ -671,6 +683,7 @@ void scalehls::registerHIDACppPipeline() {
 
 void scalehls::registerTransformsPasses() {
   registerScaleHLSDSEPipeline();
+  registerScaleHLSNoDSEPipeline();
   registerHIDAPyTorchDSEPipeline();
   registerHIDAPyTorchPipeline();
   registerHIDAPyTorchPipelinePost();

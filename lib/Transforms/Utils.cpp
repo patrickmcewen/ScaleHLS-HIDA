@@ -55,38 +55,38 @@ bool scalehls::applyOptStrategy(AffineLoopBand &band, func::FuncOp func,
   if (!func->isProperAncestor(band.front()))
     return false;
 
-  auto startTime = std::chrono::high_resolution_clock::now();
+  //auto startTime = std::chrono::high_resolution_clock::now();
   // Apply loop tiling.
   if (!applyLoopTiling(band, tileList))
     return false;
 
-  auto endTime = std::chrono::high_resolution_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-  LLVM_DEBUG(llvm::dbgs() << "applyLoopTiling() took " << duration.count() << " ms\n";);
+  //auto endTime = std::chrono::high_resolution_clock::now();
+  //auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+  //LLVM_DEBUG(llvm::dbgs() << "applyLoopTiling() took " << duration.count() << " ms\n";);
 
-  startTime = std::chrono::high_resolution_clock::now();
+  //startTime = std::chrono::high_resolution_clock::now();
   // Apply loop pipelining.
   if (!applyLoopPipelining(band, band.size() - 1, targetII))
     return false;
 
-  endTime = std::chrono::high_resolution_clock::now();
-  duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-  LLVM_DEBUG(llvm::dbgs() << "applyLoopPipelining() took " << duration.count() << " ms\n";);
+  //endTime = std::chrono::high_resolution_clock::now();
+  //duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+  //LLVM_DEBUG(llvm::dbgs() << "applyLoopPipelining() took " << duration.count() << " ms\n";);
 
-  startTime = std::chrono::high_resolution_clock::now();
+  //startTime = std::chrono::high_resolution_clock::now();
   // Apply memory access optimizations and the best suitable array partition
   // strategy to the function.
   applyMemoryOpts(func);
-  endTime = std::chrono::high_resolution_clock::now();
-  duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-  LLVM_DEBUG(llvm::dbgs() << "applyMemoryOpts() took " << duration.count() << " ms\n";);
+  //endTime = std::chrono::high_resolution_clock::now();
+  //duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+  //LLVM_DEBUG(llvm::dbgs() << "applyMemoryOpts() took " << duration.count() << " ms\n";);
 
-  startTime = std::chrono::high_resolution_clock::now();
+  //startTime = std::chrono::high_resolution_clock::now();
   applyAutoArrayPartition(func);
 
-  endTime = std::chrono::high_resolution_clock::now();
-  duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-  LLVM_DEBUG(llvm::dbgs() << "applyAutoArrayPartition() took " << duration.count() << " ms\n";);
+  //endTime = std::chrono::high_resolution_clock::now();
+  //duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+  //LLVM_DEBUG(llvm::dbgs() << "applyAutoArrayPartition() took " << duration.count() << " ms\n";);
 
   return true;
 }

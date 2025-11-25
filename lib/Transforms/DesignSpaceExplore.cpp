@@ -208,7 +208,7 @@ static void emitTileListDebugInfo(FactorList tileList) {
                if (i != e - 1)
                  llvm::dbgs() << ",";
                else
-                 llvm::dbgs() << ")\n";
+                 llvm::dbgs() << ")";
              });
 }
 
@@ -358,7 +358,7 @@ bool LoopDesignSpace::evaluateTileConfig(TileConfig config) {
 
   // Apply the tile config and estimate the loop band.
   auto tileList = getTileList(config);
-  emitTileListDebugInfo(tileList);
+  //emitTileListDebugInfo(tileList);
 
   // Calculate the total iteration number.
   unsigned iterNum = 1;
@@ -424,7 +424,9 @@ void LoopDesignSpace::initializeLoopDesignSpace(unsigned maxInitParallel) {
       evaluateTileConfig(config);
       auto endTime = std::chrono::high_resolution_clock::now();
       auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-      LLVM_DEBUG(llvm::dbgs() << "evaluateTileConfig() took " << duration.count() << " ms, evaluated from initializeLoopDesignSpace()\n";);
+      LLVM_DEBUG(llvm::dbgs() << "evaluateTileConfig() on tile list ";);
+      emitTileListDebugInfo(tileList);
+      LLVM_DEBUG(llvm::dbgs() << " took " << duration.count() << " ms, evaluated from initializeLoopDesignSpace()\n";);
     }
   }
 
@@ -534,7 +536,9 @@ void LoopDesignSpace::exploreLoopDesignSpace(unsigned maxIterNum,
       evaluateTileConfig(config);
       auto endTime = std::chrono::high_resolution_clock::now();
       auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-      LLVM_DEBUG(llvm::dbgs() << "evaluateTileConfig() took " << duration.count() << " ms, evaluated from exploreLoopDesignSpace()\n";);
+      LLVM_DEBUG(llvm::dbgs() << "evaluateTileConfig()  on tile list ";);
+      emitTileListDebugInfo(tileList);
+      LLVM_DEBUG(llvm::dbgs() << " took " << duration.count() << " ms, evaluated from exploreLoopDesignSpace()\n";);
       break;
     }
 
@@ -616,7 +620,7 @@ void FuncDesignSpace::combLoopDesignSpaces() {
   for (auto &loopPoint : firstLoopSpace.paretoPoints) {
     // Annotate the first loop.
     auto loop = targetLoops[0];
-    LLVM_DEBUG(llvm::dbgs() << "Annotating the first loop of function " << func.getName() << " with latency " << loopPoint.latency << " and dsp num " << loopPoint.dspNum << "\n";);
+    //LLVM_DEBUG(llvm::dbgs() << "Annotating the first loop of function " << func.getName() << " with latency " << loopPoint.latency << " and dsp num " << loopPoint.dspNum << "\n";);
     setTiming(loop, -1, -1, loopPoint.latency, -1);
     setResource(loop, -1, loopPoint.dspNum, -1);
 
@@ -659,7 +663,7 @@ void FuncDesignSpace::combLoopDesignSpaces() {
       for (unsigned ii = 0; ii < i; ++ii) {
         auto &oldLoopPoint = funcPoint.loopDesignPoints[ii];
         auto oldLoop = targetLoops[ii];
-        LLVM_DEBUG(llvm::dbgs() << "Annotating the loop " << ii << " of function " << func.getName() << " with latency " << oldLoopPoint.latency << " and dsp num " << oldLoopPoint.dspNum << "\n";);
+        //LLVM_DEBUG(llvm::dbgs() << "Annotating the loop " << ii << " of function " << func.getName() << " with latency " << oldLoopPoint.latency << " and dsp num " << oldLoopPoint.dspNum << "\n";);
         setTiming(oldLoop, -1, -1, oldLoopPoint.latency, -1);
         setResource(oldLoop, -1, oldLoopPoint.dspNum, -1);
       }
@@ -668,7 +672,7 @@ void FuncDesignSpace::combLoopDesignSpaces() {
       for (auto &loopPoint : loopSpace.paretoPoints) {
         // Annotate the new loop,
         auto loop = targetLoops[i];
-        LLVM_DEBUG(llvm::dbgs() << "Annotating the loop " << i << " of function " << func.getName() << " with latency " << loopPoint.latency << " and dsp num " << loopPoint.dspNum << "\n";);
+        //LLVM_DEBUG(llvm::dbgs() << "Annotating the loop " << i << " of function " << func.getName() << " with latency " << loopPoint.latency << " and dsp num " << loopPoint.dspNum << "\n";);
         setTiming(loop, -1, -1, loopPoint.latency, -1);
         setResource(loop, -1, loopPoint.dspNum, -1);
 
@@ -1365,6 +1369,7 @@ HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, 
 FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool directiveOnly,
                                           StringRef outputRootPath,
                                           StringRef csvRootPath, bool isTop) {
+  auto startExploreDesignSpaceTime = std::chrono::high_resolution_clock::now();
   //LLVM_DEBUG(llvm::dbgs() << "----------\nStage3: conduct single function design "
   //                           "space exploration...\n";);
 
@@ -1430,7 +1435,12 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
   // Clone the function again (with its module) for the function design space
   tmpFunc = cloneFunctionWithModule(func);
   auto funcSpace = FuncDesignSpace(tmpFunc, loopSpaces, estimator, maxDspNum);
+
+  auto startCombineLoopDesignSpacesTime = std::chrono::high_resolution_clock::now();
   funcSpace.combLoopDesignSpaces();
+  auto endCombineLoopDesignSpacesTime = std::chrono::high_resolution_clock::now();
+  auto durationCombineLoopDesignSpaces = std::chrono::duration_cast<std::chrono::milliseconds>(endCombineLoopDesignSpacesTime - startCombineLoopDesignSpacesTime);
+  LLVM_DEBUG(llvm::dbgs() << "Combine loop design spaces took " << durationCombineLoopDesignSpaces.count() << " ms\n";);
 
   // Dump design points to csv file for each function.
   auto funcCsvFilePath =
@@ -1466,6 +1476,10 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
       break;
     }
   }*/
+
+  auto endExploreDesignSpaceTime = std::chrono::high_resolution_clock::now();
+  auto durationExploreDesignSpace = std::chrono::duration_cast<std::chrono::milliseconds>(endExploreDesignSpaceTime - startExploreDesignSpaceTime);
+  LLVM_DEBUG(llvm::dbgs() << "Single function design space exploration took " << durationExploreDesignSpace.count() << " ms\n";);
 
   return funcSpace;
 }

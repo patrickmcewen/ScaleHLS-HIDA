@@ -52,6 +52,7 @@ void scalehls::registerScaleHLSDSEPipeline() {
         // Legalize the input program.
         pm.addPass(scalehls::createFuncPreprocessPass(opts.hlsTopFunc));
         pm.addPass(scalehls::createMaterializeReductionPass());
+        pm.addPass(scalehls::createAffineLoopPerfectionPass());
 
         if (opts.debugPoint == 1)
           return;

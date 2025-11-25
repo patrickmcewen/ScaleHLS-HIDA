@@ -4,10 +4,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/Affine/LoopUtils.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/IntegerSet.h"
 #include "scalehls/Transforms/Passes.h"
 #include "scalehls/Transforms/Utils.h"
+#include "llvm/Support/Debug.h"
 
+#define DEBUG_TYPE "scalehls"
 using namespace mlir;
 using namespace scalehls;
 
@@ -171,14 +175,43 @@ bool scalehls::applyAffineLoopPerfection(AffineLoopBand &band) {
 namespace {
 struct AffineLoopPerfection
     : public AffineLoopPerfectionBase<AffineLoopPerfection> {
-  void runOnOperation() override {
-    // Collect all target loop bands.
+  // Helper function to process a function and its nested functions recursively
+  void processFunction(func::FuncOp func) {
+    // Collect all target loop bands in the current function.
     AffineLoopBands targetBands;
-    getLoopBands(getOperation().front(), targetBands);
+    getLoopBands(func.front(), targetBands);
 
-    // Apply loop order optimization to each loop band.
-    for (auto &band : targetBands)
-      applyAffineLoopPerfection(band);
+    LLVM_DEBUG(llvm::dbgs() << "Applying loop perfection to function: " << func.getName() << "\n";);
+
+    // Apply loop perfection to each loop band.
+    for (auto &band : targetBands) {
+      if (!isPerfectlyNested(band)) {
+        LLVM_DEBUG(llvm::dbgs() << "Loop band is not perfectly nested in function " << func.getName() << ", applying loop perfection...\n";);
+        applyAffineLoopPerfection(band);
+      }
+    }
+
+    // Recursively process any nested functions within this function.
+    func.walk([&](func::CallOp callOp) {
+      // Resolve the callee function from the call operation
+      auto callee = SymbolTable::lookupNearestSymbolFrom(callOp, callOp.getCalleeAttr());
+      if (!callee) {
+        LLVM_DEBUG(llvm::dbgs() << "Warning: Cannot find callee for call op: " 
+                                << callOp << " (skipping)\n";);
+        return;
+      }
+      auto nestedFunc = dyn_cast<func::FuncOp>(callee);
+      if (!nestedFunc) {
+        LLVM_DEBUG(llvm::dbgs() << "Warning: Callee is not a function operation for call: " 
+                                << callOp << " (skipping)\n";);
+        return;
+      }
+      processFunction(nestedFunc);
+    });
+  }
+
+  void runOnOperation() override {
+    processFunction(getOperation());
   }
 };
 } // namespace

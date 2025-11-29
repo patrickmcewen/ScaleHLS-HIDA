@@ -1017,6 +1017,24 @@ void HierFuncDesignSpace::dumpHierFuncDesignSpace(StringRef csvFilePath) {
 bool HierFuncDesignSpace::applyOptStrategyRecursive(func::FuncOp currentFunc, HierFuncDesignPoint hierFuncPoint, ModuleOp parentModule, unsigned sampleIndex) {
   //LLVM_DEBUG(llvm::dbgs() << "Apply optimization strategies to the current function '"
   //                        << currentFunc.getName() << "' for sample index " << sampleIndex << "...\n";);
+  //LLVM_DEBUG(llvm::dbgs() << "The optimized latency of the current function is " << optimizedLatency << " and the optimized dsp num is " << optimizedDspNum << "\n";);
+  //dumpFuncMLIR(currentFunc, "optimized_func", false);
+  // STEP 2: Apply optimization strategies to the sub functions
+  //LLVM_DEBUG(llvm::dbgs() << hierFuncPoint.subHierFuncDesignPoints.size() << " sub function design points to apply optimization strategies to\n";);
+  //LLVM_DEBUG(llvm::dbgs() << "Number of design spaces in the sub hierarchical function design space is " << subHierFuncDesignSpaces.size() << "\n";);
+  for (unsigned i = 0; i < hierFuncPoint.subHierFuncDesignPoints.size(); ++i) {
+    auto &subHierFuncPoint = hierFuncPoint.subHierFuncDesignPoints[i];
+    auto &subHierFuncSpace = subHierFuncDesignSpaces[i];
+    auto subFunc = getSubFuncFromModule(parentModule, subHierFuncSpace.funcName);
+    if (!subFunc) {
+      llvm::errs() << "[DSE] ERROR: Cannot find sub function '" << subHierFuncSpace.funcName 
+                   << "' in module\n";
+      return false;
+    }
+    if (!subHierFuncSpace.applyOptStrategyRecursive(subFunc, subHierFuncPoint, parentModule, sampleIndex))
+      return false;
+  }
+
   // STEP 1: Apply optimization strategies to the current function
   //dumpFuncMLIR(currentFunc, "before_optimized_func", false);
   auto funcPoint = hierFuncPoint.funcDesignPoint;
@@ -1045,23 +1063,6 @@ bool HierFuncDesignSpace::applyOptStrategyRecursive(func::FuncOp currentFunc, Hi
   estimator.estimateFunc(currentFunc);
   auto optimizedLatency = getTiming(currentFunc).getLatency();
   auto optimizedDspNum = getResource(currentFunc).getDsp();
-  //LLVM_DEBUG(llvm::dbgs() << "The optimized latency of the current function is " << optimizedLatency << " and the optimized dsp num is " << optimizedDspNum << "\n";);
-  //dumpFuncMLIR(currentFunc, "optimized_func", false);
-  // STEP 2: Apply optimization strategies to the sub functions
-  //LLVM_DEBUG(llvm::dbgs() << hierFuncPoint.subHierFuncDesignPoints.size() << " sub function design points to apply optimization strategies to\n";);
-  //LLVM_DEBUG(llvm::dbgs() << "Number of design spaces in the sub hierarchical function design space is " << subHierFuncDesignSpaces.size() << "\n";);
-  for (unsigned i = 0; i < hierFuncPoint.subHierFuncDesignPoints.size(); ++i) {
-    auto &subHierFuncPoint = hierFuncPoint.subHierFuncDesignPoints[i];
-    auto &subHierFuncSpace = subHierFuncDesignSpaces[i];
-    auto subFunc = getSubFuncFromModule(parentModule, subHierFuncSpace.funcName);
-    if (!subFunc) {
-      llvm::errs() << "[DSE] ERROR: Cannot find sub function '" << subHierFuncSpace.funcName 
-                   << "' in module\n";
-      return false;
-    }
-    if (!subHierFuncSpace.applyOptStrategyRecursive(subFunc, subHierFuncPoint, parentModule, sampleIndex))
-      return false;
-  }
   //LLVM_DEBUG(llvm::dbgs() << "Optimization strategies applied to the sub functions of '"
   //                        << currentFunc.getName() << "' for sample index " << sampleIndex << ".\n";);
   return true;

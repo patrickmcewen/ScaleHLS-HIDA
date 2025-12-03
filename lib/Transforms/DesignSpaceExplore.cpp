@@ -1400,8 +1400,8 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
           assert(false && "Loop perfection applied but band is still not perfectly nested");
         }
       } else {
-        LLVM_DEBUG(llvm::dbgs() << "Failed to apply loop perfection (likely due to unsupported operations like scf.if)\n";);
-        assert(false && "Failed to apply loop perfection");
+        LLVM_DEBUG(llvm::dbgs() << "Failed to apply loop perfection\n";);
+        //assert(false && "Failed to apply loop perfection");
       }
     }
   }

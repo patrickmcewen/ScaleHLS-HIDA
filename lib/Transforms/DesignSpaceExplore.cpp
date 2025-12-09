@@ -1256,14 +1256,20 @@ bool ScaleHLSExplorer::simplifyLoopNests(func::FuncOp func) {
 
       // Find the candidate loop in the temporary function and apply fully loop
       // unrolling to it.
+      llvm::SmallVector<AffineForOp, 8> loopsToOptimize;
+
+      // First pass: collect marked loops, do not mutate IR here.
       tmpFunc.walk([&](AffineForOp loop) {
-        if (loop->getAttrOfType<BoolAttr>("opt_flag")) {
-          applyFullyLoopUnrolling(*loop.getBody());
-          applyMemoryOpts(tmpFunc);
-          applyAutoArrayPartition(tmpFunc);
-          return;
-        }
+        if (loop->getAttrOfType<BoolAttr>("opt_flag"))
+          loopsToOptimize.push_back(loop);
       });
+
+      // Second pass: safely apply heavy transforms.
+      for (AffineForOp loop : loopsToOptimize) {
+        applyFullyLoopUnrolling(*loop.getBody());
+        applyMemoryOpts(tmpFunc);
+        applyAutoArrayPartition(tmpFunc);
+      }
 
       // Estimate the temporary function.
       estimator.estimateFunc(tmpFunc);

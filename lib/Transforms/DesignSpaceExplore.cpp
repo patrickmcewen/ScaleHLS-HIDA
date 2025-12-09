@@ -138,6 +138,9 @@ static void updateParetoPoints(ContainerType &paretoPoints,
   //LLVM_DEBUG(llvm::dbgs() << "Updating pareto points with maxDspNum: " << maxDspNum << " and maxBramNum: " << maxBramNum << "\n";);
   //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points before filtering: " << paretoPoints.size() << "\n";);
   // First, filter by resource constraints if provided
+
+  // DEBUG CONTROL (uncomment to use): unsigned maxDspSoFar = UINT_MAX;
+
   if (maxDspNum != UINT_MAX || maxBramNum != UINT_MAX) {
     std::vector<DesignPointType> filteredPoints;
     for (auto &point : paretoPoints) {
@@ -148,9 +151,21 @@ static void updateParetoPoints(ContainerType &paretoPoints,
       }
       // Note: DesignPointType only has dspNum, not bramNum
       // BRAM checking would need to be done separately where we have the resource object
+
+      // DEBUG CONTROL
+      /*if (withinConstraints && filteredPoints.empty()) {
+        filteredPoints.push_back(point);
+      } else if (withinConstraints && point.dspNum < maxDspSoFar) {
+        filteredPoints[0] = point;
+        maxDspSoFar = point.dspNum;
+      }*/ 
+      // END DEBUG CONTROL
+
+      // COMMENT THIS BIT OUT AND UNCOMMENT THE ABOVE TO ALWAYS GET THE MINIMUM DSP POINT
       if (withinConstraints) {
         filteredPoints.push_back(point);
       }
+
     }
     //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points in filtered points: " << filteredPoints.size() << "\n";);
     paretoPoints.assign(filteredPoints.begin(), filteredPoints.end());

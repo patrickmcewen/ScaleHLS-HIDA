@@ -423,6 +423,11 @@ bool scalehls::applyAutoArrayPartition(func::FuncOp func, unsigned threshold) {
 
   // Apply partition to all sub-functions and traverse all function to update
   // the "partitionsMap".
+  // Track a counter for generating unique function names.
+  unsigned cloneCounter = 0;
+  auto module = func->getParentOfType<ModuleOp>();
+  assert(module && "Function must be in a module");
+
   func.walk([&](func::CallOp op) {
     auto callee = SymbolTable::lookupNearestSymbolFrom(op, op.getCalleeAttr());
 
@@ -444,11 +449,28 @@ bool scalehls::applyAutoArrayPartition(func::FuncOp func, unsigned threshold) {
     auto subFunc = dyn_cast<func::FuncOp>(callee);
     assert(subFunc && "callable is not a function operation");
 
-    // Apply array partition to the sub-function.
-    applyAutoArrayPartition(subFunc, threshold);
+    // Clone the sub-function with a unique name to avoid type mismatches
+    // when the same function is called from multiple places with different
+    // partition requirements.
+    auto clonedFunc = subFunc.clone();
+    std::string uniqueName = (subFunc.getName() + "_partitioned_" + 
+                             std::to_string(cloneCounter++)).str();
+    clonedFunc.setName(uniqueName);
+    
+    // Insert the cloned function into the module at the end.
+    Block &moduleBlock = module.getBodyRegion().front();
+    OpBuilder builder(module);
+    builder.setInsertionPointToEnd(&moduleBlock);
+    builder.insert(clonedFunc);
+    
+    // Update the call op to call the cloned function instead.
+    op.setCalleeAttr(FlatSymbolRefAttr::get(op.getContext(), uniqueName));
+
+    // Apply array partition to the cloned sub-function.
+    applyAutoArrayPartition(clonedFunc, threshold);
 
     for (auto [type, operand] :
-         llvm::zip(subFunc.getArgumentTypes(), op.getOperands())) {
+         llvm::zip(clonedFunc.getArgumentTypes(), op.getOperands())) {
       if (auto memrefType = type.dyn_cast<MemRefType>()) {
         auto &partitions = partitionsMap[operand];
 
@@ -505,93 +527,6 @@ bool scalehls::applyAutoArrayPartition(func::FuncOp func, unsigned threshold) {
 
   // Update the types of all sub-functions.
   updateSubFuncs(func, builder);
-
-  // update partitions of memrefs in other functions if they are passed to a function which had its arguments partitioned
-  // steps:
-  // 1. Walk through all call sites in the module
-  // 2. For each call site, get the callee function and its argument types
-  // 3. If the callee argument types mismatch the call site's operand types, update partitionsMap of the operand in the call site to match the callee function's argument partitions
-  // 4. update the call site's operand partition to match the callee function's argument partitions
-  auto otherPartitionsMap = DenseMap<func::FuncOp, DenseMap<Value, SmallVector<Partition, 4>>>();
-  auto functionsToAlign = std::set<func::FuncOp>();
-  if (auto mod = func->getParentOfType<ModuleOp>()) {
-    mod.walk([&](func::CallOp callOp) {
-      Operation *calleeOp =
-          SymbolTable::lookupNearestSymbolFrom(callOp, callOp.getCalleeAttr());
-      if (!calleeOp)
-        calleeOp = mod.lookupSymbol(callOp.getCallee());
-
-      auto calleeFunc = dyn_cast_or_null<func::FuncOp>(calleeOp);
-      assert(calleeFunc && "callee not found");
-      auto containingFunc = callOp->getParentOfType<func::FuncOp>();
-      assert(containingFunc && "containing function not found");
-
-      for (auto [operand, argType] :
-           llvm::zip(callOp.getOperands(), calleeFunc.getArgumentTypes())) {
-        // Only act when there is a type mismatch between the call operand and
-        // the callee argument.
-        if (operand.getType() == argType)
-          continue;
-
-        //llvm::errs() << "Type mismatch in containing function " << containingFunc.getName() << " for call site " << callOp << ": " << operand.getType() << " != " << argType << "\n";
-
-        if (auto memrefType = argType.dyn_cast<MemRefType>()) {
-          auto &partitions = otherPartitionsMap[containingFunc][operand];
-
-          functionsToAlign.insert(containingFunc);
-
-          if (partitions.empty())
-            partitions = SmallVector<Partition, 4>(
-                memrefType.getRank(), Partition(PartitionKind::NONE, 1));
-
-          // Traverse all dimensions of the callee memref type and propagate
-          // its partition layout into the partitions map.
-          if (auto layout =
-                  memrefType.getLayout().dyn_cast<PartitionLayoutAttr>())
-            for (int64_t dim = 0; dim < memrefType.getRank(); ++dim) {
-              auto kind = layout.getKinds()[dim];
-              auto factor = layout.getFactors()[dim];
-              if (factor > partitions[dim].second)
-                partitions[dim] = Partition(kind, factor);
-            }
-        } else {
-          // Non-memref argument: just align the operand type if needed.
-          operand.setType(argType);
-        }
-      }
-    });
-  }
-
-  // Align function type with entry block argument types.
-  for (auto funcToAlign : functionsToAlign) {
-    // Constuct and set new type to each partitioned MemRefType.
-    auto builder = Builder(funcToAlign);
-    for (auto [memref, partitions] : otherPartitionsMap[funcToAlign]) {
-      SmallVector<hls::PartitionKind, 4> kinds;
-      SmallVector<unsigned, 4> factors;
-      for (auto [kind, factor] : partitions) {
-        kinds.push_back(kind);
-        factors.push_back(factor);
-      }
-
-      if (llvm::any_of(kinds, [](PartitionKind kind) {
-            return kind != PartitionKind::NONE;
-          }))
-        applyArrayPartition(memref, factors, kinds, false, threshold);
-
-      if (auto axiPort = memref.getDefiningOp<AxiPortOp>()) {
-        auto axiType = AxiType::get(memref.getContext(), memref.getType());
-        LLVM_DEBUG(llvm::dbgs() << "\nUpdate AxiPort type: " << *axiPort
-                                << ", Type: " << axiType << "\n";);
-        axiPort.getAxi().setType(axiType);
-        LLVM_DEBUG(llvm::dbgs() << "Updated op: " << *axiPort << "\n";);
-      }
-    }
-    auto resultTypes = funcToAlign.front().getTerminator()->getOperandTypes();
-    auto inputTypes = funcToAlign.front().getArgumentTypes();
-    funcToAlign.setType(builder.getFunctionType(inputTypes, resultTypes));
-    updateSubFuncs(funcToAlign, builder);
-  }
   return true;
 }
 

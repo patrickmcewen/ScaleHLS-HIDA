@@ -915,6 +915,26 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
     LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the first sub function " << subHierFuncDesignSpaces[0].func.getName() << "\n";);
+    
+    // Clean up cloned modules from loop design spaces
+    for (int ii = 0; ii < newFuncDesignSpace.loopDesignSpaces.size(); ++ii) {
+      auto &loopDesignSpace = newFuncDesignSpace.loopDesignSpaces[ii];
+      if (loopDesignSpace.func) {
+        auto tmpParentModule = loopDesignSpace.func->getParentOfType<ModuleOp>();
+        if (tmpParentModule) {
+          tmpParentModule->destroy();
+          LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned module from loop design space " << ii << "\n";);
+        }
+      }
+    }
+    // Clean up cloned function from newFuncDesignSpace
+    if (newFuncDesignSpace.func) {
+      auto tmpParentModule = newFuncDesignSpace.func->getParentOfType<ModuleOp>();
+      if (tmpParentModule) {
+        tmpParentModule->destroy();
+        LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned function from newFuncDesignSpace\n";);
+      }
+    }
   }
   updateParetoPoints(paretoPoints, maxDspNum);
   LLVM_DEBUG(llvm::dbgs() << "Done traversing all design points of the first sub function " << subHierFuncDesignSpaces[0].func.getName() << ". There are now " << paretoPoints.size() << " pareto points in the current function design space.\n";);
@@ -960,6 +980,26 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
         LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the sub function " << subHierFuncSpace.func.getName() << "\n";);
         iter++;
+        
+        // Clean up cloned modules from loop design spaces
+        for (int ii = 0; ii < newFuncDesignSpace.loopDesignSpaces.size(); ++ii) {
+          auto &loopDesignSpace = newFuncDesignSpace.loopDesignSpaces[ii];
+          if (loopDesignSpace.func) {
+            auto tmpParentModule = loopDesignSpace.func->getParentOfType<ModuleOp>();
+            if (tmpParentModule) {
+              tmpParentModule->destroy();
+              LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned module from loop design space " << ii << "\n";);
+            }
+          }
+        }
+        // Clean up cloned function from newFuncDesignSpace
+        if (newFuncDesignSpace.func) {
+          auto tmpParentModule = newFuncDesignSpace.func->getParentOfType<ModuleOp>();
+          if (tmpParentModule) {
+            tmpParentModule->destroy();
+            LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned function from newFuncDesignSpace\n";);
+          }
+        }
       }
     }
 

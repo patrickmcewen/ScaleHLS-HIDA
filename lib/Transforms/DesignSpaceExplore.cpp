@@ -765,6 +765,8 @@ bool FuncDesignSpace::exportParetoDesigns(unsigned outputNum,
       auto &os = outputFile->os();
       os << tmpFunc << "\n";
       outputFile->keep();
+
+      tmpModule->destroy();
     }
     ++sampleIndex;
   }
@@ -1124,6 +1126,8 @@ bool HierFuncDesignSpace::exportParetoDesigns(unsigned outputNum,
       auto &os = outputFile->os();
       os << tmpModule << "\n";
       outputFile->keep();
+
+      tmpModule->destroy();
     }
     ++sampleIndex;
   }
@@ -1286,6 +1290,7 @@ bool ScaleHLSExplorer::simplifyLoopNests(func::FuncOp func) {
       }
 
       candidate->removeAttr("opt_flag");
+      tmpModule->destroy();
     }
   }
 

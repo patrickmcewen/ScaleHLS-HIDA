@@ -40,7 +40,7 @@ struct LoopDesignPoint {
 
 class LoopDesignSpace {
 public:
-  explicit LoopDesignSpace(func::FuncOp func, AffineLoopBand &band,
+  explicit LoopDesignSpace(func::FuncOp func, ModuleOp parentModule, AffineLoopBand &band,
                            ScaleHLSEstimator &estimator, unsigned maxDspNum,
                            unsigned maxExplParallel, unsigned maxLoopParallel,
                            bool directiveOnly);
@@ -78,6 +78,7 @@ public:
 
   /// Associated function, loop band, and estimator.
   func::FuncOp func;
+  ModuleOp parentModule;
   AffineLoopBand &band;
   ScaleHLSEstimator &estimator;
   unsigned maxDspNum;
@@ -129,10 +130,10 @@ struct FuncDesignPoint {
 
 class FuncDesignSpace {
 public:
-  explicit FuncDesignSpace(func::FuncOp func,
+  explicit FuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                            std::vector<LoopDesignSpace> loopDesignSpaces,
                            ScaleHLSEstimator &estimator, unsigned maxDspNum)
-      : func(func), loopDesignSpaces(loopDesignSpaces), estimator(estimator),
+      : func(func), parentModule(parentModule), loopDesignSpaces(loopDesignSpaces), estimator(estimator),
         maxDspNum(maxDspNum) {
     AffineLoopBands targetBands;
     getLoopBands(func.front(), targetBands);
@@ -161,6 +162,7 @@ public:
 
   /// Associated function, loop design spaces, and estimator.
   func::FuncOp func;
+  ModuleOp parentModule;
   std::vector<LoopDesignSpace> loopDesignSpaces;
   ScaleHLSEstimator &estimator;
   unsigned maxDspNum;
@@ -194,19 +196,19 @@ class ScaleHLSExplorer;
 class HierFuncDesignSpace {
 public:
   // Constructor with funcDesignSpace
-  explicit HierFuncDesignSpace(func::FuncOp func,
+  explicit HierFuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                                FuncDesignSpace funcDesignSpace,
                                std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces,
                                ScaleHLSEstimator &estimator, unsigned maxDspNum)
-      : func(func), funcDesignSpace(std::move(funcDesignSpace)), 
+      : func(func), parentModule(parentModule),funcDesignSpace(std::move(funcDesignSpace)), 
         subHierFuncDesignSpaces(std::move(subHierFuncDesignSpaces)), 
         estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()) {}
 
   // Constructor without funcDesignSpace - can be set later using setFuncDesignSpace()
-  explicit HierFuncDesignSpace(func::FuncOp func,
+  explicit HierFuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                                std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces,
                                ScaleHLSEstimator &estimator, unsigned maxDspNum)
-      : func(func), 
+      : func(func), parentModule(parentModule),
         subHierFuncDesignSpaces(std::move(subHierFuncDesignSpaces)), 
         estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()) {}
 
@@ -245,6 +247,7 @@ public:
   std::vector<HierFuncDesignPoint> paretoPoints;
 
   func::FuncOp func;
+  ModuleOp parentModule;
   std::optional<FuncDesignSpace> funcDesignSpace;  // Optional to allow deferred initialization
   std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces;  // Store by value to avoid dangling references
   ScaleHLSEstimator &estimator;

@@ -95,16 +95,9 @@ static bool dumpFuncMLIR(func::FuncOp func, StringRef label = "", bool stopAfter
 /// Returns the cloned function. The cloned module is kept alive because the
 /// function is part of the module's region, so as long as we hold a reference
 /// to the function, the module stays alive.
-static func::FuncOp cloneFunctionWithModule(func::FuncOp func) {
+static std::pair<func::FuncOp, ModuleOp> cloneFunctionWithModule(func::FuncOp func) {
   // Get the module containing the function
   ModuleOp module = func->getParentOfType<ModuleOp>();
-  if (!module) {
-    // If function is not in a module, fall back to simple clone
-    // (this shouldn't happen in normal usage, but handle it gracefully)
-    LLVM_DEBUG(llvm::dbgs() << "Warning: Function '" << func.getName() 
-                            << "' is not in a module, using simple clone\n";);
-    return func.clone();
-  }
   
   // Clone the entire module to preserve symbol table hierarchy.
   // This ensures that all function calls within the cloned function can
@@ -125,7 +118,7 @@ static func::FuncOp cloneFunctionWithModule(func::FuncOp func) {
   // because clonedFunc is part of clonedModule's region. We don't need to
   // explicitly store the module reference.
   
-  return clonedFunc;
+  return std::make_pair(clonedFunc, clonedModule);
 }
 
 /// Update paretoPoints to remove design points that are not pareto frontiers.
@@ -225,11 +218,11 @@ static void emitTileListDebugInfo(FactorList tileList) {
              });
 }
 
-LoopDesignSpace::LoopDesignSpace(func::FuncOp func, AffineLoopBand &band,
+LoopDesignSpace::LoopDesignSpace(func::FuncOp func, ModuleOp parentModule, AffineLoopBand &band,
                                  ScaleHLSEstimator &estimator,
                                  unsigned maxDspNum, unsigned maxExplParallel,
                                  unsigned maxLoopParallel, bool directiveOnly)
-    : func(func), band(band), estimator(estimator), maxDspNum(maxDspNum) {
+    : func(func), parentModule(parentModule), band(band), estimator(estimator), maxDspNum(maxDspNum) {
   // Initialize tile vector related members.
   validTileConfigNum = 1;
   for (auto loop : band) {
@@ -607,6 +600,20 @@ void FuncDesignSpace::dumpFuncDesignSpace(StringRef csvFilePath) {
   //                        << csvFilePath << "\".\n\n");
 }
 
+void cleanUpClonedModulesAndFunctions(FuncDesignSpace &funcDesignSpace) {
+  for (unsigned ii = 0; ii < funcDesignSpace.loopDesignSpaces.size(); ++ii) {
+    auto &loopDesignSpace = funcDesignSpace.loopDesignSpaces[ii];
+    if (loopDesignSpace.parentModule) {
+      loopDesignSpace.parentModule->destroy();
+      LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned module from loop design space " << ii << "\n";);
+    }
+  }
+  if (funcDesignSpace.parentModule) {
+    funcDesignSpace.parentModule->destroy();
+    LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned module from func design space\n";);
+  }
+}
+
 void FuncDesignSpace::combLoopDesignSpaces() {
   //LLVM_DEBUG(llvm::dbgs() << "Combine the loop design spaces...\n";);
 
@@ -737,7 +744,7 @@ bool FuncDesignSpace::exportParetoDesigns(unsigned outputNum,
       //dumpFuncMLIR(func, "pre_optimized_func_design_point", false);
 
       // Clone a new function (with its module) and apply optimization.
-      auto tmpFunc = cloneFunctionWithModule(func);
+      auto [tmpFunc, tmpModule] = cloneFunctionWithModule(func);
       //dumpFuncMLIR(tmpFunc, "before_optimized_func_design_point", false);
       if (!applyOptStrategy(tmpFunc, tileLists, targetIIs))
         return false;
@@ -916,25 +923,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
     LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the first sub function " << subHierFuncDesignSpaces[0].func.getName() << "\n";);
     
-    // Clean up cloned modules from loop design spaces
-    for (int ii = 0; ii < newFuncDesignSpace.loopDesignSpaces.size(); ++ii) {
-      auto &loopDesignSpace = newFuncDesignSpace.loopDesignSpaces[ii];
-      if (loopDesignSpace.func) {
-        auto tmpParentModule = loopDesignSpace.func->getParentOfType<ModuleOp>();
-        if (tmpParentModule) {
-          tmpParentModule->destroy();
-          LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned module from loop design space " << ii << "\n";);
-        }
-      }
-    }
-    // Clean up cloned function from newFuncDesignSpace
-    if (newFuncDesignSpace.func) {
-      auto tmpParentModule = newFuncDesignSpace.func->getParentOfType<ModuleOp>();
-      if (tmpParentModule) {
-        tmpParentModule->destroy();
-        LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned function from newFuncDesignSpace\n";);
-      }
-    }
+    cleanUpClonedModulesAndFunctions(newFuncDesignSpace);
   }
   updateParetoPoints(paretoPoints, maxDspNum);
   LLVM_DEBUG(llvm::dbgs() << "Done traversing all design points of the first sub function " << subHierFuncDesignSpaces[0].func.getName() << ". There are now " << paretoPoints.size() << " pareto points in the current function design space.\n";);
@@ -980,26 +969,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
         LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the sub function " << subHierFuncSpace.func.getName() << "\n";);
         iter++;
-        
-        // Clean up cloned modules from loop design spaces
-        for (int ii = 0; ii < newFuncDesignSpace.loopDesignSpaces.size(); ++ii) {
-          auto &loopDesignSpace = newFuncDesignSpace.loopDesignSpaces[ii];
-          if (loopDesignSpace.func) {
-            auto tmpParentModule = loopDesignSpace.func->getParentOfType<ModuleOp>();
-            if (tmpParentModule) {
-              tmpParentModule->destroy();
-              LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned module from loop design space " << ii << "\n";);
-            }
-          }
-        }
-        // Clean up cloned function from newFuncDesignSpace
-        if (newFuncDesignSpace.func) {
-          auto tmpParentModule = newFuncDesignSpace.func->getParentOfType<ModuleOp>();
-          if (tmpParentModule) {
-            tmpParentModule->destroy();
-            LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned function from newFuncDesignSpace\n";);
-          }
-        }
+        cleanUpClonedModulesAndFunctions(newFuncDesignSpace);
       }
     }
 
@@ -1134,8 +1104,7 @@ bool HierFuncDesignSpace::exportParetoDesigns(unsigned outputNum,
     if (sampleIndex % sampleStep == 0) {
       // Clone function with its module to preserve symbol table
       // Clone the module and cast to ModuleOp
-      auto tmpFunc = cloneFunctionWithModule(func);
-      auto tmpModule = tmpFunc->getParentOfType<ModuleOp>();
+      auto [tmpFunc, tmpModule] = cloneFunctionWithModule(func);
 
       //dumpFuncMLIR(tmpFunc, "before_optimized_func_hier", false);
       if (!applyOptStrategyRecursive(tmpFunc, hierFuncPoint, tmpModule, sampleIndex))
@@ -1290,7 +1259,7 @@ bool ScaleHLSExplorer::simplifyLoopNests(func::FuncOp func) {
       // Note: We need to set the flag on the original function first, then clone,
       // because the cloned function will be used for optimization.
       candidate->setAttr("opt_flag", BoolAttr::get(func.getContext(), true));
-      auto tmpFunc = cloneFunctionWithModule(func);
+      auto [tmpFunc, tmpModule] = cloneFunctionWithModule(func);
 
       // Find the candidate loop in the temporary function and apply fully loop
       // unrolling to it.
@@ -1411,7 +1380,7 @@ HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, 
                << func.getName() << "'.\n";);
   // STEP : Combine function design spaces into current hierarchical function design space.
   //dumpFuncMLIR(func, "post_explore_design_space", false);
-  HierFuncDesignSpace hierFuncSpace = HierFuncDesignSpace(func, subHierFuncDesignSpaces, estimator, maxDspNum);
+  HierFuncDesignSpace hierFuncSpace = HierFuncDesignSpace(func, func->getParentOfType<ModuleOp>(), subHierFuncDesignSpaces, estimator, maxDspNum);
   hierFuncSpace.combFuncDesignSpaces(*this, directiveOnly, outputRootPath, csvRootPath, isTop);
 
   hierFuncSpace.dumpHierFuncDesignSpace(csvRootPath.str() + "function_hier_output/" + func.getName().str() + "_space.csv");
@@ -1430,7 +1399,7 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
   //dumpFuncMLIR(func, "pre_explore_design_space", false);
 
   // Clone the function by cloning its module first to preserve symbol table
-  auto tmpFunc = cloneFunctionWithModule(func);
+  auto [tmpFunc, tmpModule] = cloneFunctionWithModule(func);
   //func::FuncOp tmpFunc = func;
   AffineLoopBands targetBands;
   getLoopBands(tmpFunc.front(), targetBands);
@@ -1468,7 +1437,7 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
   std::vector<LoopDesignSpace> loopSpaces;
   for (unsigned i = 0; i < targetNum; ++i) {
     auto space =
-        LoopDesignSpace(tmpFunc, targetBands[i], estimator, maxDspNum,
+        LoopDesignSpace(tmpFunc, tmpModule, targetBands[i], estimator, maxDspNum,
                         maxExplParallel, maxLoopParallel, directiveOnly);
 
     unsigned initParallel = isTop ? 1 : maxInitParallel;
@@ -1487,8 +1456,8 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
 
   // Combine all loop design spaces into a function design space.
   // Clone the function again (with its module) for the function design space
-  tmpFunc = cloneFunctionWithModule(func);
-  auto funcSpace = FuncDesignSpace(tmpFunc, loopSpaces, estimator, maxDspNum);
+  auto [tmpFunc2, tmpModule2] = cloneFunctionWithModule(func);
+  auto funcSpace = FuncDesignSpace(tmpFunc2, tmpModule2, loopSpaces, estimator, maxDspNum);
 
   auto startCombineLoopDesignSpacesTime = std::chrono::high_resolution_clock::now();
   funcSpace.combLoopDesignSpaces();
@@ -1500,36 +1469,6 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
   auto funcCsvFilePath =
       csvRootPath.str() + "loop_output/" + func.getName().str() + "_space.csv";
   funcSpace.dumpFuncDesignSpace(funcCsvFilePath);
-
-  // Export sampled pareto points MLIR source.
-  /*funcSpace.exportParetoDesigns(outputNum, outputRootPath);
-
-  // Apply the best function design point under the constraints.
-  for (auto &funcPoint : funcSpace.paretoPoints) {
-    if (funcPoint.dspNum <= maxDspNum) {
-      std::vector<FactorList> tileLists;
-      std::vector<unsigned> targetIIs;
-
-      for (unsigned i = 0; i < targetNum; ++i) {
-        auto &loopSpace = funcSpace.loopDesignSpaces[i];
-        auto &loopPoint = funcPoint.loopDesignPoints[i];
-        auto tileList = loopSpace.getTileList(loopPoint.tileConfig);
-        auto targetII = loopPoint.targetII;
-
-        LLVM_DEBUG(llvm::dbgs() << "Loop band " << i << ": "
-                                << "Loop tiling & pipelining (";);
-        LLVM_DEBUG(for (auto tile : tileList) { llvm::dbgs() << tile << ","; });
-        LLVM_DEBUG(llvm::dbgs() << targetII << ")\n");
-
-        tileLists.push_back(tileList);
-        targetIIs.push_back(targetII);
-      }
-
-      if (!applyOptStrategy(tmpFunc, tileLists, targetIIs))
-        assert(false && "Failed to apply optimization strategies to the current function");
-      break;
-    }
-  }*/
 
   auto endExploreDesignSpaceTime = std::chrono::high_resolution_clock::now();
   auto durationExploreDesignSpace = std::chrono::duration_cast<std::chrono::milliseconds>(endExploreDesignSpaceTime - startExploreDesignSpaceTime);

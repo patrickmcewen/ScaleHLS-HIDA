@@ -603,14 +603,16 @@ void FuncDesignSpace::dumpFuncDesignSpace(StringRef csvFilePath) {
 void cleanUpClonedModulesAndFunctions(FuncDesignSpace &funcDesignSpace) {
   for (unsigned ii = 0; ii < funcDesignSpace.loopDesignSpaces.size(); ++ii) {
     auto &loopDesignSpace = funcDesignSpace.loopDesignSpaces[ii];
-    if (loopDesignSpace.parentModule) {
-      loopDesignSpace.parentModule->destroy();
-      LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned module from loop design space " << ii << "\n";);
+    auto parentModule = loopDesignSpace.func->getParentOfType<ModuleOp>();
+    if (parentModule) {
+      LLVM_DEBUG(llvm::dbgs() << "Destroying cloned module from loop design space " << ii << "\n";);
+      parentModule->destroy();
     }
   }
-  if (funcDesignSpace.parentModule) {
-    funcDesignSpace.parentModule->destroy();
-    LLVM_DEBUG(llvm::dbgs() << "Cleaned up cloned module from func design space\n";);
+  auto parentModule = funcDesignSpace.func->getParentOfType<ModuleOp>();
+  if (parentModule) {
+    LLVM_DEBUG(llvm::dbgs() << "Destroying cloned module from func design space\n";);
+    parentModule->destroy();
   }
 }
 

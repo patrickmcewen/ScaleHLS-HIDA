@@ -49,6 +49,7 @@ add_mlir_library(MLIRScaleHLSTransforms
   Tensor/TosaSimplifyGraph.cpp
 
   DesignSpaceExplore.cpp
+  FuncDelete.cpp
   FuncDuplication.cpp
   FuncPreprocess.cpp
   Passes.cpp

@@ -449,22 +449,40 @@ bool scalehls::applyAutoArrayPartition(func::FuncOp func, unsigned threshold) {
     auto subFunc = dyn_cast<func::FuncOp>(callee);
     assert(subFunc && "callable is not a function operation");
 
-    // Clone the sub-function with a unique name to avoid type mismatches
-    // when the same function is called from multiple places with different
-    // partition requirements.
-    auto clonedFunc = subFunc.clone();
-    std::string uniqueName = (subFunc.getName() + "_partitioned_" + 
-                             std::to_string(cloneCounter++)).str();
-    clonedFunc.setName(uniqueName);
-    
-    // Insert the cloned function into the module at the end.
-    Block &moduleBlock = module.getBodyRegion().front();
-    OpBuilder builder(module);
-    builder.setInsertionPointToEnd(&moduleBlock);
-    builder.insert(clonedFunc);
-    
-    // Update the call op to call the cloned function instead.
-    op.setCalleeAttr(FlatSymbolRefAttr::get(op.getContext(), uniqueName));
+
+    auto clonedFunc = subFunc;
+    bool typeMismatch = false;
+    for (auto [type, operand] :
+         llvm::zip(subFunc.getArgumentTypes(), op.getOperands())) {
+      if (auto memrefType = type.dyn_cast<MemRefType>()) {
+        if (memrefType != operand.getType()) {
+          typeMismatch = true;
+          break;
+        }
+      } else if (type != operand.getType()) {
+        typeMismatch = true;
+        break;
+      }
+    }
+    if (typeMismatch) {
+      // Clone the sub-function with a unique name to avoid type mismatches
+      // when the same function is called from multiple places with different
+      // partition requirements.
+      llvm::errs() << "Type mismatch for call op: " << op << " will clone the function\n";
+      clonedFunc = subFunc.clone();
+      std::string uniqueName = (subFunc.getName() + "_partitioned_" + 
+                              std::to_string(cloneCounter++)).str();
+      clonedFunc.setName(uniqueName);
+      
+      // Insert the cloned function into the module at the end.
+      Block &moduleBlock = module.getBodyRegion().front();
+      OpBuilder builder(module);
+      builder.setInsertionPointToEnd(&moduleBlock);
+      builder.insert(clonedFunc);
+      
+      // Update the call op to call the cloned function instead.
+      op.setCalleeAttr(FlatSymbolRefAttr::get(op.getContext(), uniqueName));
+    }
 
     // Apply array partition to the cloned sub-function.
     applyAutoArrayPartition(clonedFunc, threshold);

@@ -280,7 +280,7 @@ public:
   bool simplifyLoopNests(func::FuncOp func);
   bool optimizeLoopBands(func::FuncOp func, bool directiveOnly);
   FuncDesignSpace exploreDesignSpace(func::FuncOp func, bool directiveOnly,
-                          StringRef outputRootPath, StringRef csvRootPath, bool isTop, bool sampleLoopSpaces=false);
+                          StringRef outputRootPath, StringRef csvRootPath, bool isTop);
 
   HierFuncDesignSpace exploreHierDesignSpace(func::FuncOp func, bool directiveOnly,
                               StringRef outputRootPath, StringRef csvRootPath, bool isTop);

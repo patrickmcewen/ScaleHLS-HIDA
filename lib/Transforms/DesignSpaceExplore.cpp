@@ -131,9 +131,9 @@ static void updateParetoPoints(ContainerType &paretoPoints,
   //LLVM_DEBUG(llvm::dbgs() << "Updating pareto points with maxDspNum: " << maxDspNum << " and maxBramNum: " << maxBramNum << "\n";);
   //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points before filtering: " << paretoPoints.size() << "\n";);
   //DEBUG CONTROL (uncomment to use): 
-  //unsigned maxDspSoFar = UINT_MAX;
+  /*unsigned maxDspSoFar = UINT_MAX;
   // First, filter by resource constraints if provided
-  /*if (maxDspNum != UINT_MAX || maxBramNum != UINT_MAX) {
+  if (maxDspNum != UINT_MAX || maxBramNum != UINT_MAX) {
     std::vector<DesignPointType> filteredPoints;
     for (auto &point : paretoPoints) {
       bool withinConstraints = true;
@@ -145,18 +145,18 @@ static void updateParetoPoints(ContainerType &paretoPoints,
       // BRAM checking would need to be done separately where we have the resource object
       
       // DEBUG CONTROL
-      /*if (withinConstraints && filteredPoints.empty()) {
+      if (filteredPoints.empty()) {
         filteredPoints.push_back(point);
-      } else if (withinConstraints && point.dspNum < maxDspSoFar) {
+      } /*else if (point.dspNum < maxDspSoFar) {
         filteredPoints[0] = point;
         maxDspSoFar = point.dspNum;
-      } *//*
+      } */
       // END DEBUG CONTROL
 
       // COMMENT THIS BIT OUT AND UNCOMMENT THE ABOVE TO ALWAYS GET THE MINIMUM DSP POINT
-      if (withinConstraints) {
+      /*if (withinConstraints) {
         filteredPoints.push_back(point);
-      }
+      }*//*
     }
     //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points in filtered points: " << filteredPoints.size() << "\n";);
     paretoPoints.assign(filteredPoints.begin(), filteredPoints.end());
@@ -897,7 +897,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
   }
 
   if (sampleSubFuncs) {
-    unsigned iters = 100;
+    unsigned iters = 1;
     LLVM_DEBUG(llvm::dbgs() << "Sampling hierarchical function design points for function " << func.getName() << " with " << iters << " iterations.\n";);
     for (unsigned iter = 0; iter < iters; ++iter) {
       auto startTime = std::chrono::high_resolution_clock::now();
@@ -914,7 +914,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
       }
 
       // Explore the loop design space of the current function for the given configurations of sub functions
-      auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath, false); // fully explore loops for the sample case
+      auto newFuncDesignSpace = explorer.exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath, isTop); // fully explore loops for the sample case
       setFuncDesignSpace(newFuncDesignSpace);
       for (auto &funcPoint : newFuncDesignSpace.paretoPoints) {
         auto newHierFuncPoint = createHierFuncDesignPoint(funcPoint, subHierFuncPoints);

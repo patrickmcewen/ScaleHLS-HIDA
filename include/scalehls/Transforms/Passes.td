@@ -39,6 +39,11 @@ def FuncDuplication : Pass<"scalehls-func-duplication", "mlir::ModuleOp"> {
   let constructor = "mlir::scalehls::createFuncDuplicationPass()";
 }
 
+def FuncDelete : Pass<"scalehls-func-delete", "ModuleOp"> {
+  let summary = "Delete unused functions in a module";
+  let constructor = "mlir::scalehls::createFuncDeletePass()";
+}
+
 def FuncPreprocess : Pass<"scalehls-func-preprocess", "func::FuncOp"> {
   let summary = "Preprocess the functions subsequent ScaleHLS optimizations";
   let constructor = "mlir::scalehls::createFuncPreprocessPass()";

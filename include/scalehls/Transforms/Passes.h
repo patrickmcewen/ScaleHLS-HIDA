@@ -42,6 +42,7 @@ void addSimplifyAffineLoopPasses(OpPassManager &pm);
 std::unique_ptr<Pass>
 createDesignSpaceExplorePass(std::string dseTargetSpec = "");
 std::unique_ptr<Pass> createFuncDuplicationPass();
+std::unique_ptr<Pass> createFuncDeletePass();
 std::unique_ptr<Pass>
 createFuncPreprocessPass(std::string hlsTopFunc = "forward");
 

@@ -897,7 +897,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
   }
 
   if (sampleSubFuncs) {
-    unsigned iters = 1;
+    unsigned iters = sampleIterNum;
     LLVM_DEBUG(llvm::dbgs() << "Sampling hierarchical function design points for function " << func.getName() << " with " << iters << " iterations.\n";);
     for (unsigned iter = 0; iter < iters; ++iter) {
       auto startTime = std::chrono::high_resolution_clock::now();
@@ -1375,7 +1375,7 @@ bool ScaleHLSExplorer::optimizeLoopBands(func::FuncOp func,
 
 HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, bool directiveOnly,
                                               StringRef outputRootPath,
-                                              StringRef csvRootPath, bool isTop) {
+                                              StringRef csvRootPath, bool isTop, bool sampleSubFuncs) {
   LLVM_DEBUG(llvm::dbgs() << "----------\nStage3: Conduct hierarchical function "
                              "design space exploration for function '"
                              << func.getName() << "'...\n";);
@@ -1422,7 +1422,7 @@ HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, 
     
     LLVM_DEBUG(llvm::dbgs() << "Exploring hierarchical function design space for sub function '"
                             << calleeName << "'...\n";);
-    auto subHierFuncSpace = exploreHierDesignSpace(subFunc, directiveOnly, outputRootPath, csvRootPath, false);
+    auto subHierFuncSpace = exploreHierDesignSpace(subFunc, directiveOnly, outputRootPath, csvRootPath, false, false); // only sample sub functions on top level
     subHierFuncDesignSpaces.push_back(subHierFuncSpace);
   });
   
@@ -1431,7 +1431,7 @@ HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, 
                << func.getName() << "'.\n";);
   // STEP : Combine function design spaces into current hierarchical function design space.
   //dumpFuncMLIR(func, "post_explore_design_space", false);
-  HierFuncDesignSpace hierFuncSpace = HierFuncDesignSpace(func, func->getParentOfType<ModuleOp>(), subHierFuncDesignSpaces, estimator, 100000, true);
+  HierFuncDesignSpace hierFuncSpace = HierFuncDesignSpace(func, func->getParentOfType<ModuleOp>(), subHierFuncDesignSpaces, estimator, 100000, sampleSubFuncs, sampleIterNum);
   hierFuncSpace.combFuncDesignSpaces(*this, directiveOnly, outputRootPath, csvRootPath, isTop);
 
   hierFuncSpace.dumpHierFuncDesignSpace(csvRootPath.str() + "function_hier_output/" + func.getName().str() + "_space.csv");
@@ -1570,7 +1570,7 @@ void ScaleHLSExplorer::applyDesignSpaceExplore(func::FuncOp func,
   //if (!exploreDesignSpace(func, directiveOnly, outputRootPath, csvRootPath))
   //  return;
   //dumpFuncMLIR(func, "before_explore_hier_design_space", false);
-  auto hierFuncSpace = exploreHierDesignSpace(func, directiveOnly, outputRootPath, csvRootPath, true);
+  auto hierFuncSpace = exploreHierDesignSpace(func, directiveOnly, outputRootPath, csvRootPath, true, sampleSubFuncs);
   //dumpFuncMLIR(func, "after_explore_hier_design_space", false);
   hierFuncSpace.exportParetoDesigns(outputNum, outputRootPath, topModule);
 }
@@ -1626,6 +1626,12 @@ struct DesignSpaceExplore : public DesignSpaceExploreBase<DesignSpaceExplore> {
     bool resourceConstr =
         configObj->getBoolean("resource_constr").value_or(true);
 
+    bool sampleSubFuncs = configObj->getBoolean("sample-sub-funcs").value_or(false);
+    unsigned sampleIterNum = configObj->getInteger("sample-iter-num").value_or(100);
+
+    LLVM_DEBUG(llvm::dbgs() << "Sample sub functions: " << sampleSubFuncs << "\n";);
+    LLVM_DEBUG(llvm::dbgs() << "Sample iter num: " << sampleIterNum << "\n";);
+
     // Collect profiling latency and DSP usage data, where default values are
     // based on Xilinx PYNQ-Z1 board.
     llvm::StringMap<int64_t> latencyMap;
@@ -1641,7 +1647,7 @@ struct DesignSpaceExplore : public DesignSpaceExploreBase<DesignSpaceExplore> {
     auto estimator = ScaleHLSEstimator(latencyMap, dspUsageMap, true);
     auto explorer = ScaleHLSExplorer(estimator, outputNum, maxDspNum,
                                      maxInitParallel, maxExplParallel,
-                                     maxLoopParallel, maxIterNum, maxDistance, module);
+                                     maxLoopParallel, maxIterNum, maxDistance, module, sampleSubFuncs, sampleIterNum);
 
     // Optimize the top function.
     // TODO: Support to contain sub-functions.

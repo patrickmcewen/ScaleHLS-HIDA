@@ -199,18 +199,18 @@ public:
   explicit HierFuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                                FuncDesignSpace funcDesignSpace,
                                std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces,
-                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs)
+                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs, unsigned sampleIterNum)
       : func(func), parentModule(parentModule),funcDesignSpace(std::move(funcDesignSpace)), 
         subHierFuncDesignSpaces(std::move(subHierFuncDesignSpaces)), 
-        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs) {}
+        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum) {}
 
   // Constructor without funcDesignSpace - can be set later using setFuncDesignSpace()
   explicit HierFuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                                std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces,
-                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs)
+                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs, unsigned sampleIterNum)
       : func(func), parentModule(parentModule),
         subHierFuncDesignSpaces(std::move(subHierFuncDesignSpaces)), 
-        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs) {}
+        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum) {}
 
   // Setter to assign funcDesignSpace after construction
   void setFuncDesignSpace(FuncDesignSpace funcDesignSpace) {
@@ -254,7 +254,7 @@ public:
   unsigned maxDspNum;
   std::string funcName;
   bool sampleSubFuncs;
-
+  unsigned sampleIterNum;
   //SmallVector<AffineForOp, 4> targetLoops;
 };
 
@@ -268,11 +268,11 @@ public:
   explicit ScaleHLSExplorer(ScaleHLSEstimator &estimator, unsigned outputNum,
                             unsigned maxDspNum, unsigned maxInitParallel,
                             unsigned maxExplParallel, unsigned maxLoopParallel,
-                            unsigned maxIterNum, float maxDistance, ModuleOp module)
+                            unsigned maxIterNum, float maxDistance, ModuleOp module, bool sampleSubFuncs, unsigned sampleIterNum)
       : estimator(estimator), outputNum(outputNum), maxDspNum(maxDspNum),
         maxInitParallel(maxInitParallel), maxExplParallel(maxExplParallel),
         maxLoopParallel(maxLoopParallel), maxIterNum(maxIterNum),
-        maxDistance(maxDistance), topModule(cast<ModuleOp>(module->clone())) {}
+        maxDistance(maxDistance), topModule(cast<ModuleOp>(module->clone())), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum) {}
 
   bool emitQoRDebugInfo(func::FuncOp func, std::string message);
 
@@ -283,7 +283,7 @@ public:
                           StringRef outputRootPath, StringRef csvRootPath, bool isTop);
 
   HierFuncDesignSpace exploreHierDesignSpace(func::FuncOp func, bool directiveOnly,
-                              StringRef outputRootPath, StringRef csvRootPath, bool isTop);
+                              StringRef outputRootPath, StringRef csvRootPath, bool isTop, bool sampleSubFuncs);
 
   void applyDesignSpaceExplore(func::FuncOp func, bool directiveOnly,
                                StringRef outputRootPath, StringRef csvRootPath);
@@ -309,6 +309,8 @@ public:
   float maxDistance;
 
   ModuleOp topModule;
+  bool sampleSubFuncs;
+  unsigned sampleIterNum;
 };
 
 } // namespace scalehls

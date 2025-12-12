@@ -199,18 +199,18 @@ public:
   explicit HierFuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                                FuncDesignSpace funcDesignSpace,
                                std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces,
-                               ScaleHLSEstimator &estimator, unsigned maxDspNum)
+                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs)
       : func(func), parentModule(parentModule),funcDesignSpace(std::move(funcDesignSpace)), 
         subHierFuncDesignSpaces(std::move(subHierFuncDesignSpaces)), 
-        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()) {}
+        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs) {}
 
   // Constructor without funcDesignSpace - can be set later using setFuncDesignSpace()
   explicit HierFuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                                std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces,
-                               ScaleHLSEstimator &estimator, unsigned maxDspNum)
+                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs)
       : func(func), parentModule(parentModule),
         subHierFuncDesignSpaces(std::move(subHierFuncDesignSpaces)), 
-        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()) {}
+        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs) {}
 
   // Setter to assign funcDesignSpace after construction
   void setFuncDesignSpace(FuncDesignSpace funcDesignSpace) {
@@ -253,6 +253,7 @@ public:
   ScaleHLSEstimator &estimator;
   unsigned maxDspNum;
   std::string funcName;
+  bool sampleSubFuncs;
 
   //SmallVector<AffineForOp, 4> targetLoops;
 };
@@ -279,7 +280,7 @@ public:
   bool simplifyLoopNests(func::FuncOp func);
   bool optimizeLoopBands(func::FuncOp func, bool directiveOnly);
   FuncDesignSpace exploreDesignSpace(func::FuncOp func, bool directiveOnly,
-                          StringRef outputRootPath, StringRef csvRootPath, bool isTop);
+                          StringRef outputRootPath, StringRef csvRootPath, bool isTop, bool sampleLoopSpaces=false);
 
   HierFuncDesignSpace exploreHierDesignSpace(func::FuncOp func, bool directiveOnly,
                               StringRef outputRootPath, StringRef csvRootPath, bool isTop);

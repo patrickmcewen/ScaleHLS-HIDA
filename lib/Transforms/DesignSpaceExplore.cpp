@@ -126,41 +126,44 @@ static std::pair<func::FuncOp, ModuleOp> cloneFunctionWithModule(func::FuncOp fu
 template <typename ContainerType>
 static void updateParetoPoints(ContainerType &paretoPoints,
                                unsigned maxDspNum = UINT_MAX,
-                               unsigned maxBramNum = UINT_MAX) {
+                               unsigned maxBramNum = UINT_MAX,
+                               bool filterPoints = true) {
   using DesignPointType = typename ContainerType::value_type;
   //LLVM_DEBUG(llvm::dbgs() << "Updating pareto points with maxDspNum: " << maxDspNum << " and maxBramNum: " << maxBramNum << "\n";);
   //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points before filtering: " << paretoPoints.size() << "\n";);
-  //DEBUG CONTROL (uncomment to use): 
-  /*unsigned maxDspSoFar = UINT_MAX;
-  // First, filter by resource constraints if provided
-  if (maxDspNum != UINT_MAX || maxBramNum != UINT_MAX) {
-    std::vector<DesignPointType> filteredPoints;
-    for (auto &point : paretoPoints) {
-      bool withinConstraints = true;
-      //LLVM_DEBUG(llvm::dbgs() << "Checking point with dspNum: " << point.dspNum << " and maxDspNum: " << maxDspNum << "\n";);
-      if (maxDspNum != UINT_MAX && point.dspNum > maxDspNum) {
-        withinConstraints = false;
-      }
-      // Note: DesignPointType only has dspNum, not bramNum
-      // BRAM checking would need to be done separately where we have the resource object
-      
-      // DEBUG CONTROL
-      if (filteredPoints.empty()) {
-        filteredPoints.push_back(point);
-      } /*else if (point.dspNum < maxDspSoFar) {
-        filteredPoints[0] = point;
-        maxDspSoFar = point.dspNum;
-      } */
-      // END DEBUG CONTROL
+  if (filterPoints) {
+    //DEBUG CONTROL (uncomment to use): 
+    //unsigned maxDspSoFar = UINT_MAX;
+    // First, filter by resource constraints if provided
+    if (maxDspNum != UINT_MAX || maxBramNum != UINT_MAX) {
+      std::vector<DesignPointType> filteredPoints;
+      for (auto &point : paretoPoints) {
+        bool withinConstraints = true;
+        //LLVM_DEBUG(llvm::dbgs() << "Checking point with dspNum: " << point.dspNum << " and maxDspNum: " << maxDspNum << "\n";);
+        if (maxDspNum != UINT_MAX && point.dspNum > maxDspNum) {
+          withinConstraints = false;
+        }
+        // Note: DesignPointType only has dspNum, not bramNum
+        // BRAM checking would need to be done separately where we have the resource object
+        
+        // DEBUG CONTROL
+        /*if (filteredPoints.empty()) {
+          filteredPoints.push_back(point);
+        } else if (point.dspNum < maxDspSoFar) {
+          filteredPoints[0] = point;
+          maxDspSoFar = point.dspNum;
+        }*/
+        // END DEBUG CONTROL
 
-      // COMMENT THIS BIT OUT AND UNCOMMENT THE ABOVE TO ALWAYS GET THE MINIMUM DSP POINT
-      /*if (withinConstraints) {
-        filteredPoints.push_back(point);
-      }*//*
+        // COMMENT THIS BIT OUT AND UNCOMMENT THE ABOVE TO ALWAYS GET THE MINIMUM DSP POINT
+        if (withinConstraints) {
+          filteredPoints.push_back(point);
+        }
+      }
+      //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points in filtered points: " << filteredPoints.size() << "\n";);
+      paretoPoints.assign(filteredPoints.begin(), filteredPoints.end());
     }
-    //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points in filtered points: " << filteredPoints.size() << "\n";);
-    paretoPoints.assign(filteredPoints.begin(), filteredPoints.end());
-  }*/
+  }
 
   //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points after filtering: " << paretoPoints.size() << "\n";);
 
@@ -927,7 +930,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
       
       cleanUpClonedModulesAndFunctions(newFuncDesignSpace);
     }
-    updateParetoPoints(paretoPoints, maxDspNum);
+    updateParetoPoints(paretoPoints, maxDspNum, false);
     LLVM_DEBUG(llvm::dbgs() << "Done sampling hierarchical function design points for function " << func.getName() << ". There are now " << paretoPoints.size() << " pareto points in the current function design space.\n";);
 
   } else {

@@ -10,24 +10,7 @@ using namespace hls;
 // Get the function name for a given arithmetic operation type
 static StringRef getBlackboxFunctionName(Operation *op) {
     if (isa<arith::AddFOp>(op)) return "addf";
-    if (isa<arith::SubFOp>(op)) return "subf";
     if (isa<arith::MulFOp>(op)) return "mulf";
-    if (isa<arith::DivFOp>(op)) return "divf";
-    if (isa<arith::RemFOp>(op)) return "remf";
-    if (isa<arith::AddIOp>(op)) return "addi";
-    if (isa<arith::SubIOp>(op)) return "subi";
-    if (isa<arith::MulIOp>(op)) return "muli";
-    if (isa<arith::DivSIOp>(op)) return "divsi";
-    if (isa<arith::DivUIOp>(op)) return "divui";
-    if (isa<arith::RemSIOp>(op)) return "remsi";
-    if (isa<arith::RemUIOp>(op)) return "remui";
-    if (isa<arith::MaxFOp>(op)) return "maxf";
-    if (isa<arith::MinFOp>(op)) return "minf";
-    if (isa<arith::MaxSIOp>(op)) return "maxsi";
-    if (isa<arith::MinSIOp>(op)) return "minsi";
-    if (isa<arith::MaxUIOp>(op)) return "maxui";
-    if (isa<arith::MinUIOp>(op)) return "minui";
-    if (isa<arith::NegFOp>(op)) return "negf";
     return "";
 }
 

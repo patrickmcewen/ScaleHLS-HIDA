@@ -127,7 +127,7 @@ template <typename ContainerType>
 static void updateParetoPoints(ContainerType &paretoPoints,
                                unsigned maxDspNum = UINT_MAX,
                                unsigned maxBramNum = UINT_MAX,
-                               bool filterPoints = true) {
+                               bool filterPoints = false) {
   using DesignPointType = typename ContainerType::value_type;
   //LLVM_DEBUG(llvm::dbgs() << "Updating pareto points with maxDspNum: " << maxDspNum << " and maxBramNum: " << maxBramNum << "\n";);
   //LLVM_DEBUG(llvm::dbgs() << "Number of pareto points before filtering: " << paretoPoints.size() << "\n";);
@@ -640,87 +640,118 @@ void FuncDesignSpace::combLoopDesignSpaces() {
     return;
   }
 
-  // Initialize the function design space with the first loop design space.
-  auto &firstLoopSpace = loopDesignSpaces[0];
-  for (auto &loopPoint : firstLoopSpace.paretoPoints) {
-    // Annotate the first loop.
-    auto loop = targetLoops[0];
-    //LLVM_DEBUG(llvm::dbgs() << "Annotating the first loop of function " << func.getName() << " with latency " << loopPoint.latency << " and dsp num " << loopPoint.dspNum << "\n";);
-    setTiming(loop, -1, -1, loopPoint.latency, -1);
-    setResource(loop, -1, loopPoint.dspNum, -1);
-
-    //dumpFuncMLIR(func, "pre_estimated_func_design_point", false);
-    //auto iterLatency = getLoopInfo(loop).getIterLatency();
-    //LLVM_DEBUG(llvm::dbgs() << "Iter latency of the first loop of function " << func.getName() << " is " << iterLatency << "\n";);
-
-    // Estimate the function and generate a new function design point.
-    estimator.estimateFunc(func);
-    auto latency = getTiming(func).getLatency();
-    auto dspNum = getResource(func).getDsp();
-    auto funcPoint = FuncDesignPoint(latency, dspNum, loopPoint);
-
-    paretoPoints.push_back(funcPoint);
-  }
-  // If no loop design points are found, create a default function design point.
-  if (paretoPoints.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "No loop design points found, creating a default function design point.\n";);
-    estimator.estimateFunc(func);
-    auto latency = getTiming(func).getLatency();
-    auto dspNum = getResource(func).getDsp();
-    auto funcPoint = FuncDesignPoint(latency, dspNum);
-    paretoPoints.push_back(funcPoint);
-  }
-
-
-  updateParetoPoints(paretoPoints, maxDspNum);
-  LLVM_DEBUG(llvm::dbgs() << "Iteration 0 loop design space pareto points number: "
-                          << paretoPoints.size() << "\n";);
-
-  // Combine other loop design spaces to the function design space one by one.
-  for (unsigned i = 1, e = loopDesignSpaces.size(); i < e; ++i) {
-    std::vector<FuncDesignPoint> newParetoPoints;
-    auto &loopSpace = loopDesignSpaces[i];
-
-    // Traverse all function design points.
-    for (auto &funcPoint : paretoPoints) {
-      // Annotate latency and dsp to all loops that are already included in the
-      // function point, they are static for all design points of the new loop.
-      for (unsigned ii = 0; ii < i; ++ii) {
-        auto &oldLoopPoint = funcPoint.loopDesignPoints[ii];
-        auto oldLoop = targetLoops[ii];
-        //LLVM_DEBUG(llvm::dbgs() << "Annotating the loop " << ii << " of function " << func.getName() << " with latency " << oldLoopPoint.latency << " and dsp num " << oldLoopPoint.dspNum << "\n";);
-        setTiming(oldLoop, -1, -1, oldLoopPoint.latency, -1);
-        setResource(oldLoop, -1, oldLoopPoint.dspNum, -1);
-      }
-
-      // Traverse all design points of the NEW loop.
-      for (auto &loopPoint : loopSpace.paretoPoints) {
-        // Annotate the new loop,
+  if (sampleSubLoops) {
+    unsigned iters = sampleIterNum;
+    LLVM_DEBUG(llvm::dbgs() << "Sampling function design points for function " << func.getName() << " with " << iters << " iterations.\n";);
+    for (unsigned iter = 0; iter < iters; ++iter) {
+      auto startTime = std::chrono::high_resolution_clock::now();
+      std::vector<LoopDesignPoint> loopPoints;
+      for (unsigned i = 0, e = loopDesignSpaces.size(); i < e; ++i) {
+        auto &loopSpace = loopDesignSpaces[i];
+        auto randomIndex = rand() % loopSpace.paretoPoints.size();
+        auto &loopPoint = loopSpace.paretoPoints[randomIndex];
         auto loop = targetLoops[i];
-        //LLVM_DEBUG(llvm::dbgs() << "Annotating the loop " << i << " of function " << func.getName() << " with latency " << loopPoint.latency << " and dsp num " << loopPoint.dspNum << "\n";);
         setTiming(loop, -1, -1, loopPoint.latency, -1);
         setResource(loop, -1, loopPoint.dspNum, -1);
-
-        // Estimate the function and generate a new function design point.
-        auto loopPoints = funcPoint.loopDesignPoints;
         loopPoints.push_back(loopPoint);
-
-        estimator.estimateFunc(func);
-        auto latency = getTiming(func).getLatency();
-        auto dspNum = getResource(func).getDsp();
-        auto newFuncPoint = FuncDesignPoint(latency, dspNum, loopPoints);
-
-        newParetoPoints.push_back(newFuncPoint);
       }
+      estimator.estimateFunc(func);
+      auto latency = getTiming(func).getLatency();
+      auto dspNum = getResource(func).getDsp();
+      auto funcPoint = FuncDesignPoint(latency, dspNum, loopPoints);
+
+      paretoPoints.push_back(funcPoint);
+      auto endTime = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+      LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the function " << func.getName() << "\n";);
+    }
+    updateParetoPoints(paretoPoints, maxDspNum, false);
+    LLVM_DEBUG(llvm::dbgs() << "Done sampling loop design points for function " << func.getName() << ". There are now " << paretoPoints.size() << " pareto points in the current function design space.\n";);
+  
+  } else {
+
+    // Initialize the function design space with the first loop design space.
+    auto &firstLoopSpace = loopDesignSpaces[0];
+    for (auto &loopPoint : firstLoopSpace.paretoPoints) {
+      // Annotate the first loop.
+      auto loop = targetLoops[0];
+      //LLVM_DEBUG(llvm::dbgs() << "Annotating the first loop of function " << func.getName() << " with latency " << loopPoint.latency << " and dsp num " << loopPoint.dspNum << "\n";);
+      setTiming(loop, -1, -1, loopPoint.latency, -1);
+      setResource(loop, -1, loopPoint.dspNum, -1);
+
+      //dumpFuncMLIR(func, "pre_estimated_func_design_point", false);
+      //auto iterLatency = getLoopInfo(loop).getIterLatency();
+      //LLVM_DEBUG(llvm::dbgs() << "Iter latency of the first loop of function " << func.getName() << " is " << iterLatency << "\n";);
+
+      // Estimate the function and generate a new function design point.
+      estimator.estimateFunc(func);
+      auto latency = getTiming(func).getLatency();
+      auto dspNum = getResource(func).getDsp();
+      auto funcPoint = FuncDesignPoint(latency, dspNum, loopPoint);
+
+      paretoPoints.push_back(funcPoint);
+    }
+    // If no loop design points are found, create a default function design point.
+    if (paretoPoints.empty()) {
+      LLVM_DEBUG(llvm::dbgs() << "No loop design points found, creating a default function design point.\n";);
+      estimator.estimateFunc(func);
+      auto latency = getTiming(func).getLatency();
+      auto dspNum = getResource(func).getDsp();
+      auto funcPoint = FuncDesignPoint(latency, dspNum);
+      paretoPoints.push_back(funcPoint);
     }
 
-    // Update pareto points after each combination.
-    updateParetoPoints(newParetoPoints, maxDspNum);
-    paretoPoints = newParetoPoints;
-    LLVM_DEBUG(llvm::dbgs() << "Iteration " << i << " loop design space pareto points number: "
+
+    updateParetoPoints(paretoPoints, maxDspNum);
+    LLVM_DEBUG(llvm::dbgs() << "Iteration 0 loop design space pareto points number: "
                             << paretoPoints.size() << "\n";);
+
+    // Combine other loop design spaces to the function design space one by one.
+    for (unsigned i = 1, e = loopDesignSpaces.size(); i < e; ++i) {
+      std::vector<FuncDesignPoint> newParetoPoints;
+      auto &loopSpace = loopDesignSpaces[i];
+
+      // Traverse all function design points.
+      for (auto &funcPoint : paretoPoints) {
+        // Annotate latency and dsp to all loops that are already included in the
+        // function point, they are static for all design points of the new loop.
+        for (unsigned ii = 0; ii < i; ++ii) {
+          auto &oldLoopPoint = funcPoint.loopDesignPoints[ii];
+          auto oldLoop = targetLoops[ii];
+          //LLVM_DEBUG(llvm::dbgs() << "Annotating the loop " << ii << " of function " << func.getName() << " with latency " << oldLoopPoint.latency << " and dsp num " << oldLoopPoint.dspNum << "\n";);
+          setTiming(oldLoop, -1, -1, oldLoopPoint.latency, -1);
+          setResource(oldLoop, -1, oldLoopPoint.dspNum, -1);
+        }
+
+        // Traverse all design points of the NEW loop.
+        for (auto &loopPoint : loopSpace.paretoPoints) {
+          // Annotate the new loop,
+          auto loop = targetLoops[i];
+          //LLVM_DEBUG(llvm::dbgs() << "Annotating the loop " << i << " of function " << func.getName() << " with latency " << loopPoint.latency << " and dsp num " << loopPoint.dspNum << "\n";);
+          setTiming(loop, -1, -1, loopPoint.latency, -1);
+          setResource(loop, -1, loopPoint.dspNum, -1);
+
+          // Estimate the function and generate a new function design point.
+          auto loopPoints = funcPoint.loopDesignPoints;
+          loopPoints.push_back(loopPoint);
+
+          estimator.estimateFunc(func);
+          auto latency = getTiming(func).getLatency();
+          auto dspNum = getResource(func).getDsp();
+          auto newFuncPoint = FuncDesignPoint(latency, dspNum, loopPoints);
+
+          newParetoPoints.push_back(newFuncPoint);
+        }
+      }
+
+      // Update pareto points after each combination.
+      updateParetoPoints(newParetoPoints, maxDspNum);
+      paretoPoints = newParetoPoints;
+      LLVM_DEBUG(llvm::dbgs() << "Iteration " << i << " loop design space pareto points number: "
+                              << paretoPoints.size() << "\n";);
+    }
+    LLVM_DEBUG(llvm::dbgs() << "\n";);
   }
-  LLVM_DEBUG(llvm::dbgs() << "\n";);
 }
 
 bool FuncDesignSpace::exportParetoDesigns(unsigned outputNum,
@@ -926,7 +957,7 @@ void HierFuncDesignSpace::combFuncDesignSpaces(ScaleHLSExplorer &explorer, bool 
       //dumpHierFuncDesignPoints(func.getName(), paretoPoints, *this);
       auto endTime = std::chrono::high_resolution_clock::now();
       auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-      LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the function " << func.getName() << "\n";);
+      LLVM_DEBUG(llvm::dbgs() << "iteration " << iter << " took " << duration.count() << " ms, for the hierarchical function " << func.getName() << "\n";);
       
       cleanUpClonedModulesAndFunctions(newFuncDesignSpace);
     }
@@ -1434,7 +1465,7 @@ HierFuncDesignSpace ScaleHLSExplorer::exploreHierDesignSpace(func::FuncOp func, 
                << func.getName() << "'.\n";);
   // STEP : Combine function design spaces into current hierarchical function design space.
   //dumpFuncMLIR(func, "post_explore_design_space", false);
-  HierFuncDesignSpace hierFuncSpace = HierFuncDesignSpace(func, func->getParentOfType<ModuleOp>(), subHierFuncDesignSpaces, estimator, 100000, sampleSubFuncs, sampleIterNum);
+  HierFuncDesignSpace hierFuncSpace = HierFuncDesignSpace(func, func->getParentOfType<ModuleOp>(), subHierFuncDesignSpaces, estimator, 100000, sampleSubFuncs, sampleIterNum, noUnrollTopFunc);
   hierFuncSpace.combFuncDesignSpaces(*this, directiveOnly, outputRootPath, csvRootPath, isTop);
 
   hierFuncSpace.dumpHierFuncDesignSpace(csvRootPath.str() + "function_hier_output/" + func.getName().str() + "_space.csv");
@@ -1494,7 +1525,7 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
         LoopDesignSpace(tmpFunc, tmpModule, targetBands[i], estimator, maxDspNum,
                         maxExplParallel, maxLoopParallel, directiveOnly);
 
-    unsigned initParallel = isTop ? 1 : maxInitParallel;
+    unsigned initParallel = (isTop && noUnrollTopFunc) ? 1 : maxInitParallel;
     //LLVM_DEBUG(llvm::dbgs() << "Loop band " << i << ": ";);
     space.initializeLoopDesignSpace(initParallel);
 
@@ -1511,7 +1542,7 @@ FuncDesignSpace ScaleHLSExplorer::exploreDesignSpace(func::FuncOp func, bool dir
   // Combine all loop design spaces into a function design space.
   // Clone the function again (with its module) for the function design space
   auto [tmpFunc2, tmpModule2] = cloneFunctionWithModule(func);
-  auto funcSpace = FuncDesignSpace(tmpFunc2, tmpModule2, loopSpaces, estimator, maxDspNum);
+  auto funcSpace = FuncDesignSpace(tmpFunc2, tmpModule2, loopSpaces, estimator, maxDspNum, sampleSubFuncs, sampleIterNum); // sampleSubFuncs is true if we want to sample sub functions
 
   auto startCombineLoopDesignSpacesTime = std::chrono::high_resolution_clock::now();
   funcSpace.combLoopDesignSpaces();
@@ -1631,9 +1662,11 @@ struct DesignSpaceExplore : public DesignSpaceExploreBase<DesignSpaceExplore> {
 
     bool sampleSubFuncs = configObj->getBoolean("sample-sub-funcs").value_or(false);
     unsigned sampleIterNum = configObj->getInteger("sample-iter-num").value_or(100);
+    bool noUnrollTopFunc = configObj->getBoolean("no-unroll-top-func").value_or(false);
 
     LLVM_DEBUG(llvm::dbgs() << "Sample sub functions: " << sampleSubFuncs << "\n";);
     LLVM_DEBUG(llvm::dbgs() << "Sample iter num: " << sampleIterNum << "\n";);
+    LLVM_DEBUG(llvm::dbgs() << "No unroll top func: " << noUnrollTopFunc << "\n";);
 
     // Collect profiling latency and DSP usage data, where default values are
     // based on Xilinx PYNQ-Z1 board.
@@ -1650,7 +1683,7 @@ struct DesignSpaceExplore : public DesignSpaceExploreBase<DesignSpaceExplore> {
     auto estimator = ScaleHLSEstimator(latencyMap, dspUsageMap, true);
     auto explorer = ScaleHLSExplorer(estimator, outputNum, maxDspNum,
                                      maxInitParallel, maxExplParallel,
-                                     maxLoopParallel, maxIterNum, maxDistance, module, sampleSubFuncs, sampleIterNum);
+                                     maxLoopParallel, maxIterNum, maxDistance, module, sampleSubFuncs, sampleIterNum, noUnrollTopFunc);
 
     // Optimize the top function.
     // TODO: Support to contain sub-functions.

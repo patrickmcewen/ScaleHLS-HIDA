@@ -132,9 +132,9 @@ class FuncDesignSpace {
 public:
   explicit FuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                            std::vector<LoopDesignSpace> loopDesignSpaces,
-                           ScaleHLSEstimator &estimator, unsigned maxDspNum)
+                           ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubLoops, unsigned sampleIterNum)
       : func(func), parentModule(parentModule), loopDesignSpaces(loopDesignSpaces), estimator(estimator),
-        maxDspNum(maxDspNum) {
+        maxDspNum(maxDspNum), sampleSubLoops(sampleSubLoops), sampleIterNum(sampleIterNum) {
     AffineLoopBands targetBands;
     getLoopBands(func.front(), targetBands);
 
@@ -166,7 +166,8 @@ public:
   std::vector<LoopDesignSpace> loopDesignSpaces;
   ScaleHLSEstimator &estimator;
   unsigned maxDspNum;
-
+  bool sampleSubLoops;
+  unsigned sampleIterNum;
   std::vector<AffineForOp> targetLoops;
 };
 
@@ -199,18 +200,18 @@ public:
   explicit HierFuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                                FuncDesignSpace funcDesignSpace,
                                std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces,
-                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs, unsigned sampleIterNum)
+                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs, unsigned sampleIterNum, bool noUnrollTopFunc)
       : func(func), parentModule(parentModule),funcDesignSpace(std::move(funcDesignSpace)), 
         subHierFuncDesignSpaces(std::move(subHierFuncDesignSpaces)), 
-        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum) {}
+        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum), noUnrollTopFunc(noUnrollTopFunc) {}
 
   // Constructor without funcDesignSpace - can be set later using setFuncDesignSpace()
   explicit HierFuncDesignSpace(func::FuncOp func, ModuleOp parentModule,
                                std::vector<HierFuncDesignSpace> subHierFuncDesignSpaces,
-                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs, unsigned sampleIterNum)
+                               ScaleHLSEstimator &estimator, unsigned maxDspNum, bool sampleSubFuncs, unsigned sampleIterNum, bool noUnrollTopFunc)
       : func(func), parentModule(parentModule),
         subHierFuncDesignSpaces(std::move(subHierFuncDesignSpaces)), 
-        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum) {}
+        estimator(estimator), maxDspNum(maxDspNum), funcName(func.getName().str()), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum), noUnrollTopFunc(noUnrollTopFunc) {}
 
   // Setter to assign funcDesignSpace after construction
   void setFuncDesignSpace(FuncDesignSpace funcDesignSpace) {
@@ -255,6 +256,7 @@ public:
   std::string funcName;
   bool sampleSubFuncs;
   unsigned sampleIterNum;
+  bool noUnrollTopFunc;
   //SmallVector<AffineForOp, 4> targetLoops;
 };
 
@@ -268,11 +270,11 @@ public:
   explicit ScaleHLSExplorer(ScaleHLSEstimator &estimator, unsigned outputNum,
                             unsigned maxDspNum, unsigned maxInitParallel,
                             unsigned maxExplParallel, unsigned maxLoopParallel,
-                            unsigned maxIterNum, float maxDistance, ModuleOp module, bool sampleSubFuncs, unsigned sampleIterNum)
+                            unsigned maxIterNum, float maxDistance, ModuleOp module, bool sampleSubFuncs, unsigned sampleIterNum, bool noUnrollTopFunc)
       : estimator(estimator), outputNum(outputNum), maxDspNum(maxDspNum),
         maxInitParallel(maxInitParallel), maxExplParallel(maxExplParallel),
         maxLoopParallel(maxLoopParallel), maxIterNum(maxIterNum),
-        maxDistance(maxDistance), topModule(cast<ModuleOp>(module->clone())), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum) {}
+        maxDistance(maxDistance), topModule(cast<ModuleOp>(module->clone())), sampleSubFuncs(sampleSubFuncs), sampleIterNum(sampleIterNum), noUnrollTopFunc(noUnrollTopFunc) {}
 
   bool emitQoRDebugInfo(func::FuncOp func, std::string message);
 
@@ -311,6 +313,7 @@ public:
   ModuleOp topModule;
   bool sampleSubFuncs;
   unsigned sampleIterNum;
+  bool noUnrollTopFunc;
 };
 
 } // namespace scalehls

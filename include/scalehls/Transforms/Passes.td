@@ -44,6 +44,11 @@ def FuncDelete : Pass<"scalehls-func-delete", "ModuleOp"> {
   let constructor = "mlir::scalehls::createFuncDeletePass()";
 }
 
+def OperationBlackbox : Pass<"scalehls-operation-blackbox", "ModuleOp"> {
+  let summary = "insert blackbox function calls for operations to allow for configurability of latency in HLS";
+  let constructor = "mlir::scalehls::createOperationBlackboxPass()";
+}
+
 def FuncPreprocess : Pass<"scalehls-func-preprocess", "func::FuncOp"> {
   let summary = "Preprocess the functions subsequent ScaleHLS optimizations";
   let constructor = "mlir::scalehls::createFuncPreprocessPass()";

@@ -1194,6 +1194,8 @@ bool HierFuncDesignSpace::exportParetoDesigns(unsigned outputNum,
       //dumpFuncMLIR(tmpFunc, "after_optimized_func_hier", false);
       estimator.estimateFunc(tmpFunc);
 
+      insertBlackboxFunctionCalls(tmpModule, tmpFunc);
+
       // Parse a new output file.
       auto outputFilePath = outputRootPath.str() + "/function_hier_output/" + func.getName().str() +
                             "_pareto_" + std::to_string(sampleIndex) + ".mlir";

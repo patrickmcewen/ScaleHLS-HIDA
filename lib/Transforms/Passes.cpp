@@ -50,12 +50,16 @@ void scalehls::registerScaleHLSDSEPipeline() {
       "Launch design space exploration for C/C++ kernel",
       [](OpPassManager &pm, const ScaleHLSDSEPipelineOptions &opts) {
         // Legalize the input program.
+        if (opts.debugPoint == 1)
+          return;
         pm.addPass(scalehls::createFuncPreprocessPass(opts.hlsTopFunc));
+        if (opts.debugPoint == 2)
+          return;
         pm.addPass(scalehls::createMaterializeReductionPass());
         pm.addPass(scalehls::createAffineLoopPerfectionPass());
         pm.addPass(scalehls::createFuncDeletePass());
 
-        if (opts.debugPoint == 1)
+        if (opts.debugPoint == 3)
           return;
 
         // Apply the automatic design space exploration to the top function.

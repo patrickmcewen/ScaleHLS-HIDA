@@ -24,8 +24,13 @@ static void deleteUnusedFunctions(ModuleOp module, func::FuncOp topFunc) {
     }
     module.walk([&](func::FuncOp func) {
         if (!funcsSeen.contains(func)) {
-        llvm::errs() << "Deleting unused function: " << func.getName() << "\n";
-        func.erase();
+            // Don't delete blackbox functions
+            if (isBlackboxFunctionName(func.getName())) {
+                //llvm::errs() << "Skipping blackbox function: " << func.getName() << "\n";
+                return;
+            }
+            llvm::errs() << "Deleting unused function: " << func.getName() << "\n";
+            func.erase();
         }
     });
 }

@@ -13,6 +13,7 @@
 
 namespace mlir {
 class Pass;
+class ModuleOp;
 namespace func {
 class FuncOp;
 } // namespace func
@@ -43,6 +44,12 @@ std::unique_ptr<Pass>
 createDesignSpaceExplorePass(std::string dseTargetSpec = "");
 std::unique_ptr<Pass> createFuncDuplicationPass();
 std::unique_ptr<Pass> createFuncDeletePass();
+std::unique_ptr<Pass> createOperationBlackboxPass();
+/// Check if a function name corresponds to a blackbox function.
+bool isBlackboxFunctionName(StringRef funcName);
+/// Insert blackbox function calls for arithmetic operations in the given function.
+/// This replaces all arithmetic operations with calls to corresponding blackbox functions.
+void insertBlackboxFunctionCalls(ModuleOp module, func::FuncOp func);
 std::unique_ptr<Pass>
 createFuncPreprocessPass(std::string hlsTopFunc = "forward");
 

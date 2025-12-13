@@ -52,6 +52,7 @@ add_mlir_library(MLIRScaleHLSTransforms
   FuncDelete.cpp
   FuncDuplication.cpp
   FuncPreprocess.cpp
+  OperationBlackbox.cpp
   Passes.cpp
   Utils.cpp
 

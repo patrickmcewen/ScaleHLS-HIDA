@@ -11,6 +11,7 @@
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "scalehls/Dialect/HLS/Utils.h"
 #include "scalehls/Dialect/HLS/Visitor.h"
+#include "scalehls/Transforms/Passes.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -351,6 +352,8 @@ public:
   /// Top-level MLIR module emitter.
   void emitModule(ModuleOp module);
 
+  void emitReturn(Operation *op);
+
 private:
   /// Helper to get the string indices of TransferRead/Write operations.
   template <typename TransferOpType>
@@ -489,7 +492,14 @@ public:
 
   /// Function operations.
   bool visitOp(func::CallOp op) { return emitter.emitCall(op), true; }
-  bool visitOp(func::ReturnOp op) { return true; }
+  bool visitOp(func::ReturnOp op) { 
+    if (auto func = op->getParentOfType<func::FuncOp>()) {
+      if (isBlackboxFunctionName(func.getName())) {
+        return emitter.emitReturn(op), true;
+      }
+    }
+    return true;
+  }
 
   /// SCF statements.
   bool visitOp(scf::ForOp op) { return emitter.emitScfFor(op), true; };
@@ -876,7 +886,19 @@ void ModuleEmitter::emitCall(func::CallOp op) {
   }
 
   // Emit the function call.
-  indent() << op.getCallee() << "(";
+  if (isBlackboxFunctionName(op.getCallee())) {
+    indent();
+    os << "// This is a blackbox function call.\n";
+    auto results = op.getResults();
+    for (auto result : results) {
+      indent();
+      emitValue(result);
+      os << " = " << op.getCallee() << "(";
+      break;
+    }
+  } else {
+    indent() << op.getCallee() << "(";
+  }
 
   // Handle input arguments.
   unsigned argIdx = 0;
@@ -887,15 +909,17 @@ void ModuleEmitter::emitCall(func::CallOp op) {
       os << ", ";
   }
 
-  // Handle output arguments.
-  for (auto result : op.getResults()) {
-    // The address should be passed in for scalar result arguments.
-    if (result.getType().isa<ShapedType>())
-      os << ", ";
-    else
-      os << ", &";
+  // Handle output arguments as a function arg if not blackbox
+  if (!isBlackboxFunctionName(op.getCallee())) {
+    for (auto result : op.getResults()) {
+      // The address should be passed in for scalar result arguments.
+      if (result.getType().isa<ShapedType>())
+        os << ", ";
+      else
+        os << ", &";
 
-    emitValue(result);
+      emitValue(result);
+    }
   }
 
   os << ");";
@@ -1935,8 +1959,20 @@ void ModuleEmitter::emitFunction(func::FuncOp func) {
   }
 
   // Emit function signature.
-  os << "void " << func.getName() << "(\n";
-  addIndent();
+  if (isBlackboxFunctionName(func.getName())) {
+    indent();
+    os << "// This is a blackbox function.\n";
+    auto funcReturn = cast<func::ReturnOp>(func.front().getTerminator());
+    auto results = funcReturn.getOperands();
+    for (auto result : results) {
+      os << getDataTypeName(result.getType()) << " " << func.getName() << "(\n";
+      addIndent();
+      break;
+    }
+  } else {
+    os << "void " << func.getName() << "(\n";
+    addIndent();
+  }
 
   // This vector is to record all ports of the function.
   SmallVector<Value, 8> portList;
@@ -1959,20 +1995,22 @@ void ModuleEmitter::emitFunction(func::FuncOp func) {
       os << ",\n";
   }
 
-  // Emit results.
-  auto funcReturn = cast<func::ReturnOp>(func.front().getTerminator());
-  for (auto result : funcReturn.getOperands()) {
-    os << ",\n";
-    indent();
-    // TODO: a known bug, cannot return a value twice, e.g. return %0, %0 :
-    // index, index. However, typically this should not happen.
-    if (result.getType().isa<MemRefType>())
-      emitArrayDecl(result);
-    else
-      // In Vivado HLS, pointer indicates the value is an output.
-      emitValue(result, /*rank=*/0, /*isPtr=*/true);
+  // Emit results as a function arg if not blackbox
+  if (!isBlackboxFunctionName(func.getName())) {
+    auto funcReturn = cast<func::ReturnOp>(func.front().getTerminator());
+    for (auto result : funcReturn.getOperands()) {
+      os << ",\n";
+      indent();
+      // TODO: a known bug, cannot return a value twice, e.g. return %0, %0 :
+      // index, index. However, typically this should not happen.
+      if (result.getType().isa<MemRefType>())
+        emitArrayDecl(result);
+      else
+        // In Vivado HLS, pointer indicates the value is an output.
+        emitValue(result, /*rank=*/0, /*isPtr=*/true);
 
-    portList.push_back(result);
+      portList.push_back(result);
+    }
   }
 
   reduceIndent();
@@ -1988,6 +2026,28 @@ void ModuleEmitter::emitFunction(func::FuncOp func) {
   os << "}\n";
   // An empty line.
   os << "\n";
+}
+
+void ModuleEmitter::emitReturn(Operation *op) {
+  auto returnOp = cast<func::ReturnOp>(op);
+  
+  if (returnOp.getNumOperands() == 0) {
+    indent() << "return;";
+    emitInfoAndNewLine(op);
+    return;
+  }
+  
+  // For blackbox functions, emit return statement with the return value. Assume 1 for now.
+  indent() << "return ";
+  unsigned numOperands = returnOp.getNumOperands();
+  for (unsigned i = 0; i < numOperands; ++i) {
+    emitValue(returnOp.getOperand(i));
+    break; // can come back and delete this later to emit all return values
+    if (i < numOperands - 1)
+      os << ", ";
+  }
+  os << ";";
+  emitInfoAndNewLine(op);
 }
 
 /// Top-level MLIR module emitter.

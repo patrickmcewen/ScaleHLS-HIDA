@@ -78,6 +78,7 @@ void scalehls::registerScaleHLSNoDSEPipeline() {
         pm.addPass(scalehls::createFuncPreprocessPass(opts.hlsTopFunc));
         pm.addPass(scalehls::createMaterializeReductionPass());
         pm.addPass(scalehls::createAffineLoopPerfectionPass());
+        pm.addPass(scalehls::createOperationBlackboxPass());
         pm.addPass(scalehls::createFuncDeletePass());
         pm.addPass(scalehls::createQoREstimationPass(opts.dseTargetSpec));
       });

@@ -57,7 +57,6 @@ void scalehls::registerScaleHLSDSEPipeline() {
           return;
         pm.addPass(scalehls::createMaterializeReductionPass());
         pm.addPass(scalehls::createAffineLoopPerfectionPass());
-        pm.addPass(scalehls::createFuncDeletePass());
 
         if (opts.debugPoint == 3)
           return;
@@ -79,6 +78,8 @@ void scalehls::registerScaleHLSNoDSEPipeline() {
         pm.addPass(scalehls::createMaterializeReductionPass());
         pm.addPass(scalehls::createAffineLoopPerfectionPass());
         pm.addPass(scalehls::createOperationBlackboxPass());
+        if (opts.debugPoint == 1)
+          return;
         pm.addPass(scalehls::createFuncDeletePass());
         pm.addPass(scalehls::createQoREstimationPass(opts.dseTargetSpec));
       });

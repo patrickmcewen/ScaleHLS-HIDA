@@ -1,6 +1,8 @@
 #include "scalehls/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/IR/SymbolTable.h"
 
 using namespace mlir;
@@ -8,10 +10,16 @@ using namespace scalehls;
 using namespace hls;
 
 // Get the function name for a given arithmetic operation type
-static StringRef getBlackboxFunctionName(Operation *op) {
-    if (isa<arith::AddFOp>(op)) return "addf";
-    if (isa<arith::MulFOp>(op)) return "mulf";
-    return "";
+static std::string getBlackboxFunctionName(Operation *op) {
+    std::string fn_name = "";
+    if (isa<arith::AddFOp>(op)) fn_name += "addf";
+    else if (isa<arith::MulFOp>(op)) fn_name += "mulf";
+    else if (isa<arith::DivFOp>(op)) fn_name += "divf";
+    else if (isa<arith::SubFOp>(op)) fn_name += "subf";
+    else if (isa<math::ExpOp>(op)) fn_name += "exp_bb";
+    else return "";
+    if (!(op->getParentOfType<AffineForOp>())) fn_name += "_ctrl_chain";
+    return fn_name;
 }
 
 // Get or create a blackbox function declaration
@@ -34,13 +42,14 @@ static func::FuncOp getOrCreateBlackboxFunction(ModuleOp module, StringRef funcN
     return func;
 }
 
-// Replace an arithmetic operation with a blackbox function call
-static void replaceArithOpWithBlackboxCall(Operation *op, ModuleOp module, 
+// Replace an operation with a blackbox function call
+static void replaceOpWithBlackboxCall(Operation *op, ModuleOp module, 
                                            OpBuilder &builder) {
-    StringRef funcName = getBlackboxFunctionName(op);
-    if (funcName.empty()) {
+    std::string funcNameStr = getBlackboxFunctionName(op);
+    if (funcNameStr.empty()) {
         return;
     }
+    StringRef funcName(funcNameStr);
     
     // Get operand types and result type
     SmallVector<Type> operandTypes;
@@ -71,12 +80,8 @@ namespace scalehls {
 // Check if a function name corresponds to a blackbox function
 bool isBlackboxFunctionName(StringRef funcName) {
     return funcName == "addf" || funcName == "subf" || funcName == "mulf" ||
-           funcName == "divf" || funcName == "remf" || funcName == "addi" ||
-           funcName == "subi" || funcName == "muli" || funcName == "divsi" ||
-           funcName == "divui" || funcName == "remsi" || funcName == "remui" ||
-           funcName == "maxf" || funcName == "minf" || funcName == "maxsi" ||
-           funcName == "minsi" || funcName == "maxui" || funcName == "minui" ||
-           funcName == "negf";
+           funcName == "divf" || funcName == "exp_bb" || funcName == "addf_ctrl_chain" ||
+           funcName == "mulf_ctrl_chain" || funcName == "subf_ctrl_chain" || funcName == "divf_ctrl_chain" || funcName == "exp_bb_ctrl_chain";
 }
 
 void insertBlackboxFunctionCalls(ModuleOp module, func::FuncOp func) {
@@ -87,18 +92,18 @@ void insertBlackboxFunctionCalls(ModuleOp module, func::FuncOp func) {
             insertBlackboxFunctionCalls(module, calleeFuncOp);
         }
     });
-    // Collect all arithmetic operations
-    SmallVector<Operation *> arithOps;
+    // Collect all operations to replace
+    SmallVector<Operation *> opsToReplace;
     func.walk([&](Operation *op) {
         if (getBlackboxFunctionName(op) != "") {
-            arithOps.push_back(op);
+            opsToReplace.push_back(op);
         }
     });
     
-    // Replace each arithmetic operation
+    // Replace each operation
     OpBuilder builder(func.getContext());
-    for (Operation *op : arithOps) {
-        replaceArithOpWithBlackboxCall(op, module, builder);
+    for (Operation *op : opsToReplace) {
+        replaceOpWithBlackboxCall(op, module, builder);
     }
 }
 

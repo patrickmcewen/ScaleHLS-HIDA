@@ -1195,6 +1195,7 @@ bool HierFuncDesignSpace::exportParetoDesigns(unsigned outputNum,
       estimator.estimateFunc(tmpFunc);
 
       insertBlackboxFunctionCalls(tmpModule, tmpFunc);
+      deleteUnusedFunctions(tmpModule, tmpFunc);
 
       // Parse a new output file.
       auto outputFilePath = outputRootPath.str() + "/function_hier_output/" + func.getName().str() +

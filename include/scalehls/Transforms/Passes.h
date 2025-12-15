@@ -50,6 +50,8 @@ bool isBlackboxFunctionName(StringRef funcName);
 /// Insert blackbox function calls for arithmetic operations in the given function.
 /// This replaces all arithmetic operations with calls to corresponding blackbox functions.
 void insertBlackboxFunctionCalls(ModuleOp module, func::FuncOp func);
+/// Delete unused functions in the given module.
+void deleteUnusedFunctions(ModuleOp module, func::FuncOp topFunc);
 std::unique_ptr<Pass>
 createFuncPreprocessPass(std::string hlsTopFunc = "forward");
 
